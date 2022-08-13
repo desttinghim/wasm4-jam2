@@ -41,7 +41,7 @@ var sun = geom.vec3.normalizef(geom.Vec3f{ -1, -1, -2 });
 
 var h_angle: f32 = 0;
 var v_angle: f32 = 0;
-var position = [3]f32{ 0, 1, -1 };
+var position = [3]f32{ 0, 0, -10 };
 
 fn update_safe() !void {
     defer time += 1;
@@ -52,16 +52,25 @@ fn update_safe() !void {
     _ = alloc;
     defer frame_fba[(time + 1) % 2].reset();
 
+    const _forward = zm.f32x4(
+        @cos(v_angle) * @sin(h_angle),
+        @sin(v_angle),
+        @cos(v_angle) * @cos(h_angle),
+        0,
+    );
+    const right = zm.f32x4(@sin(h_angle), 0, @cos(h_angle), 1);
+    const up = zm.cross3(right, _forward);
+    _ = up;
+
     var _position = zm.loadArr3w(position, 1);
-    // const _right = zm.cross3(_forward, zm.f32x4(0, 1, 0, 1));
+    const speed = @splat(4, @as(f32, 0.1));
+
     const gamepad = w4.GAMEPAD1.*;
     if (gamepad & w4.BUTTON_UP != 0) {
-        _position += zm.f32x4(0, 0, 1, 0);
-        // _position -= _forward;
+        _position += _forward * speed;
     }
     if (gamepad & w4.BUTTON_DOWN != 0) {
-        _position -= zm.f32x4(0, 0, 1, 0);
-        // _position += _forward;
+        _position -= _forward * speed;
     }
     if (gamepad & w4.BUTTON_LEFT != 0) {
         // Left
@@ -71,14 +80,6 @@ fn update_safe() !void {
         // Right
         h_angle = @mod(h_angle + 0.05, std.math.pi * 2.0);
     }
-    zm.storeArr3(position[0..], _position);
-
-    const _forward = zm.f32x4(
-        @cos(v_angle) * @sin(h_angle),
-        @sin(v_angle),
-        @cos(v_angle) * @cos(h_angle),
-        0,
-    );
 
     // Calculate position
     const world_to_view = zm.lookToLh(
@@ -87,31 +88,22 @@ fn update_safe() !void {
         // eye direction
         _forward,
         // up direction
+        // up,
         zm.f32x4(0, 1, 0, 0),
     );
-    // const view_to_clip = zm.perspectiveFovLh(0.25 * std.math.pi, w4.CANVAS_SIZE / w4.CANVAS_SIZE, 0.1, 100);
-    // const world_to_clip = zm.mul(world_to_view, view_to_clip);
+
+    zm.storeArr3(position[0..], _position);
 
     sun = geom.vec3.normalizef(geom.Vec3f{ -1, -1, -2 });
-    // var _eye: [3]f32 = undefined;
-    // zm.storeArr3(&_eye, zm.mul(zm.f32x4(0, 0, 0, 1), world_to_clip));
-    // const eye = @as(geom.Vec3f, _eye);
-    // const up = geom.Vec3f{ 0, 1, 0 };
-    // const right = geom.Vec3f{ _right[0], _right[1], _right[2] };
 
     var y: i32 = 0;
     while (y < w4.CANVAS_SIZE) : (y += 1) {
         var x: i32 = 0;
         while (x < w4.CANVAS_SIZE) : (x += 1) {
-            const ro = geom.Vec3f{0,0,-10};
+            const ro = position;
             const vd = rayDirection(45, @splat(2, @as(f32, w4.CANVAS_SIZE)), geom.vec2.itof(.{x,y}));
             const rd_zm = zm.mul(world_to_view, zm.loadArr3(vd));
             const rd = geom.Vec3f{rd_zm[0], rd_zm[1], rd_zm[2]};
-
-            // const world = z.mul(model, vec);
-            // const eye = z.mul(view, world);
-            // const clip = z.mul(projection, view);
-            // const screen = z.mul(viewport, clip);
 
             const info = sdf.raymarch(scene, ro, rd, .{ .maxSteps = 5, .maxDistance = 100, .epsilon = 0.001 });
             if (info.point) |point| {
