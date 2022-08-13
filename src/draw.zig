@@ -1,6 +1,6 @@
 const std = @import("std");
-const w4 = @import("wasm4");
-const geom = @import("geometry.zig");
+const geom = @import("geom.zig");
+const w4 = @import("wasm4.zig");
 
 // https://rosettacode.org/wiki/Bitmap/B%C3%A9zier_curves/Quadratic#C
 pub fn quadratic_bezier(p1: geom.Vec2f, p2: geom.Vec2f, p3: geom.Vec2f) void {
@@ -20,8 +20,8 @@ pub fn quadratic_bezier(p1: geom.Vec2f, p2: geom.Vec2f, p3: geom.Vec2f) void {
     i = 0;
     while (i < QuadraticSegments) : (i += 1) {
         const j = i + 1;
-        const ipt = geom.vec.ftoi(pts[i]);
-        const jpt = geom.vec.ftoi(pts[j]);
+        const ipt = geom.vec2.ftoi(pts[i]);
+        const jpt = geom.vec2.ftoi(pts[j]);
         w4.line(ipt[0], ipt[1], jpt[0], jpt[1]);
     }
 }
@@ -45,8 +45,8 @@ pub fn cubic_bezier(p1: geom.Vec2f, p2: geom.Vec2f, p3: geom.Vec2f, p4: geom.Vec
     i = 0;
     while (i < CubicSegments) : (i += 1) {
         const j = i + 1;
-        const ipt = geom.vec.ftoi(pts[i]);
-        const jpt = geom.vec.ftoi(pts[j]);
+        const ipt = geom.vec2.ftoi(pts[i]);
+        const jpt = geom.vec2.ftoi(pts[j]);
         w4.line(ipt[0], ipt[1], jpt[0], jpt[1]);
     }
 }
@@ -145,14 +145,14 @@ pub const Bitmap = struct {
     height: i32,
 
     pub fn blit(this: @This(), pos: geom.Vec2, flags: BlitFlags) void {
-        w4.blit(this.data, pos[geom.vec.x], pos[geom.vec.y], this.width, this.height, @bitCast(u32, flags));
+        w4.blit(this.data, pos[geom.vec2.x], pos[geom.vec2.y], this.width, this.height, @bitCast(u32, flags));
     }
 
     pub fn blit_sub(this: @This(), pos: geom.Vec2, rect: geom.AABB, flags: BlitFlags) void {
         w4.blitSub(
             this.data,
-            pos[geom.vec.x],
-            pos[geom.vec.y],
+            pos[geom.vec2.x],
+            pos[geom.vec2.y],
             geom.aabb.width(rect),
             geom.aabb.height(rect),
             @intCast(u32, geom.aabb.x(rect)),

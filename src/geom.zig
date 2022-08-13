@@ -6,7 +6,7 @@ pub const Vec2f = @Vector(2, f32);
 pub const Vec2 = @Vector(2, i32);
 
 /// Contains convenience functions for working with vectors.
-pub const vec = struct {
+pub const vec2 = struct {
     /// Vector index representing x
     pub const x = 0;
     /// Vector index representing y
@@ -77,7 +77,7 @@ pub const vec = struct {
     // f32 float backed vector functions //
     ///////////////////////////////////////
 
-    /// Rturns the distance between two vectors
+    /// Returns the distance between two vectors
     pub fn distf(a: Vec2f, b: Vec2f) f32 {
         var subbed = @fabs(a - b);
         return lengthf(subbed);
@@ -97,8 +97,8 @@ pub const vec = struct {
     /// Converts an i32 backed vector to a f32 backed one.
     /// NOTE: Conversion between floats and ints on WASM appears
     /// to be broken, so this may not return the correct results.
-    pub fn itof(vec2: Vec2) Vec2f {
-        return Vec2f{ @intToFloat(f32, vec2[0]), @intToFloat(f32, vec2[1]) };
+    pub fn itof(v2: Vec2) Vec2f {
+        return Vec2f{ @intToFloat(f32, v2[0]), @intToFloat(f32, v2[1]) };
     }
 
     /// Converts a f32 backed vector to an i32 backed one.
@@ -106,6 +106,134 @@ pub const vec = struct {
     /// to be broken, so this may not return the correct results.
     pub fn ftoi(vec2f: Vec2f) Vec2 {
         return Vec2{ @floatToInt(i32, @floor(vec2f[0])), @floatToInt(i32, @floor(vec2f[1])) };
+    }
+
+    /// Returns dot product of a and b
+    pub fn dot(a: Vec2f, b: Vec2f) f32 {
+        return a[0] * b[0] + a[1] * b[1];
+    }
+
+    /// Returns dot product of vector with self
+    pub fn dot2(v: Vec2f) f32 {
+        return dot(v, v);
+    }
+
+    /// Returns the negative dot product
+    pub fn ndot(a: Vec2f, b: Vec2f) f32 {
+        return a[0] * b[0] - a[1] * b[1];
+    }
+};
+
+/// Represents a 3D floating point Vector as .{ x, y, z }
+pub const Vec3 = @Vector(3, i32);
+/// Represents a 3D floating point Vector as .{ x, y, z }
+pub const Vec3f = @Vector(3, f32);
+
+/// Contains convenience functions for working with vectors.
+pub const vec3 = struct {
+    /// Vector index representing x
+    pub const x = 0;
+    /// Vector index representing y
+    pub const y = 1;
+    /// Vector index representing y
+    pub const z = 2;
+
+    /////////////////////////////////////////
+    // i32 integer backed vector functions //
+    /////////////////////////////////////////
+
+    /// Returns true x = x and y = y
+    pub fn equals(v1: Vec3, v2: Vec3) bool {
+        return @reduce(.And, v1 == v2);
+    }
+
+    /// Returns true if the vector is zero
+    pub fn isZero(v: Vec3) bool {
+        return equals(v, Vec3{ 0, 0, 0 });
+    }
+
+    // /// Copies the vectors x and y to make a rect
+    // pub fn double(v: Vec3) Rect {
+    //     return Rect{ v[0], v[1], v[0], v[1] };
+    // }
+
+    /// Returns the length of the vector, squared
+    pub fn length_sqr(a: Vec3) i32 {
+        return @reduce(.Add, a * a);
+    }
+
+    /// Returns the distance squared
+    pub fn dist_sqr(a: Vec3, b: Vec3) i32 {
+        return length_sqr(a - b);
+    }
+
+    /// Returns the length of the vector.
+    /// NOTE: Conversion between floats and ints on WASM appears
+    /// to be broken, so this may not return the correct results.
+    pub fn length(a: Vec3) i32 {
+        return @floatToInt(i32, @sqrt(@intToFloat(f32, length_sqr(a))));
+    }
+
+    /// Returns the distance between two vectors (assuming they are points).
+    /// NOTE: Conversion between floats and ints on WASM appears
+    /// to be broken, so this may not return the correct results.
+    pub fn dist(a: Vec3, b: Vec3) i32 {
+        return length(a - b);
+    }
+
+    ///////////////////////////////////////
+    // f32 float backed vector functions //
+    ///////////////////////////////////////
+
+    /// Returns the distance between two vectors
+    pub fn distf(a: Vec3f, b: Vec3f) f32 {
+        var subbed = @fabs(a - b);
+        return lengthf(subbed);
+    }
+
+    /// Returns the length between two vectors
+    pub fn lengthf(vector: Vec3f) f32 {
+        var squared = vector * vector;
+        return @sqrt(@reduce(.Add, squared));
+    }
+
+    /// Returns the normalized vector
+    pub fn normalizef(vector: Vec3f) Vec3f {
+        return vector / @splat(3, lengthf(vector));
+    }
+
+    /// Converts an i32 backed vector to a f32 backed one.
+    /// NOTE: Conversion between floats and ints on WASM appears
+    /// to be broken, so this may not return the correct results.
+    pub fn itof(v3: Vec3) Vec3f {
+        return Vec3f{ @intToFloat(f32, v3[0]), @intToFloat(f32, v3[1]), @intToFloat(f32, v3[2]) };
+    }
+
+    /// Converts a f32 backed vector to an i32 backed one.
+    /// NOTE: Conversion between floats and ints on WASM appears
+    /// to be broken, so this may not return the correct results.
+    pub fn ftoi(vec3f: Vec3f) Vec3 {
+        return Vec3{ @floatToInt(i32, @floor(vec3f[0])), @floatToInt(i32, @floor(vec3f[1])), @floatToInt(i32, @floor(vec3f[2])) };
+    }
+
+    /// Returns cross product of a and b
+    /// Referenced https://www.tutorialspoint.com/cplusplus-program-to-compute-cross-product-of-two-vectors
+    pub fn cross(a: Vec3f, b: Vec3f) Vec3f {
+        return .{
+            a[1] * b[2] - a[2] * b[1],
+            -(a[0] * b[2] - a[2] * b[0]),
+            a[0] * b[1] - a[1] * b[0],
+        };
+    }
+
+    /// Returns dot product of a and b
+    pub fn dot(a: Vec3f, b: Vec3f) f32 {
+        return a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+    }
+
+    /// Returns dot product of vector with self
+    pub fn dot2(v: Vec3f) f32 {
+        return dot(v, v);
     }
 };
 
@@ -175,7 +303,7 @@ pub const rect = struct {
     }
 
     pub fn shift(rectangle: Rect, vector: Vec2) Rect {
-        return rectangle + vec.double(vector);
+        return rectangle + vec2.double(vector);
     }
 
     /////////////////////////////////////
@@ -215,7 +343,7 @@ pub const rect = struct {
     }
 
     pub fn shiftf(rectangle: Rectf, vector: Vec2f) Rectf {
-        return rectangle + vec.double(vector);
+        return rectangle + vec2.double(vector);
     }
 };
 
@@ -263,12 +391,12 @@ pub const aabb = struct {
         return AABB{ posv[0], posv[1], sizev[0], sizev[1] };
     }
 
-    pub fn addv(box: AABB, vec2: Vec2) AABB {
-        return initv(pos(box) + vec2, size(box));
+    pub fn addv(box: AABB, v2: Vec2) AABB {
+        return initv(pos(box) + v2, size(box));
     }
 
-    pub fn subv(box: AABB, vec2: Vec2) AABB {
-        return initv(pos(box) - vec2, size(box));
+    pub fn subv(box: AABB, v2: Vec2) AABB {
+        return initv(pos(box) - v2, size(box));
     }
 
     /// Converts the AABBf into a Rectf
@@ -288,11 +416,11 @@ pub const aabb = struct {
         return AABBf{ posv[0], posv[1], sizev[0], sizev[1] };
     }
 
-    pub fn addvf(box: AABBf, vec2: Vec2f) AABBf {
-        return initv(pos(box) + vec2, size(box));
+    pub fn addvf(box: AABBf, v2: Vec2f) AABBf {
+        return initv(pos(box) + v2, size(box));
     }
 
-    pub fn subvf(box: AABBf, vec2: Vec2f) AABBf {
-        return initv(pos(box) - vec2, size(box));
+    pub fn subvf(box: AABBf, v2: Vec2f) AABBf {
+        return initv(pos(box) - v2, size(box));
     }
 };
