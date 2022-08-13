@@ -138,6 +138,10 @@ pub const vec3 = struct {
     /// Vector index representing y
     pub const z = 2;
 
+    pub const rightf = Vec3f{ 1, 0, 0 };
+    pub const upf = Vec3f{ 0, 1, 0 };
+    pub const forwardf = Vec3f{ 0, 0, 1 };
+
     /////////////////////////////////////////
     // i32 integer backed vector functions //
     /////////////////////////////////////////
@@ -218,7 +222,7 @@ pub const vec3 = struct {
 
     /// Returns cross product of a and b
     /// Referenced https://www.tutorialspoint.com/cplusplus-program-to-compute-cross-product-of-two-vectors
-    pub fn cross(a: Vec3f, b: Vec3f) Vec3f {
+    pub fn crossf(a: Vec3f, b: Vec3f) Vec3f {
         return .{
             a[1] * b[2] - a[2] * b[1],
             -(a[0] * b[2] - a[2] * b[0]),
@@ -227,13 +231,28 @@ pub const vec3 = struct {
     }
 
     /// Returns dot product of a and b
-    pub fn dot(a: Vec3f, b: Vec3f) f32 {
-        return a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+    pub fn dotf(a: Vec3f, b: Vec3f) f32 {
+        return @reduce(.Add, a * b);
     }
 
     /// Returns dot product of vector with self
-    pub fn dot2(v: Vec3f) f32 {
-        return dot(v, v);
+    pub fn dot2f(v: Vec3f) f32 {
+        return dotf(v, v);
+    }
+
+    /// Returns a vector of the x component of the vector
+    pub fn xVecf(v: Vec3f) Vec3f {
+        return .{ v[0], 0, 0 };
+    }
+
+    /// Returns a vector of the y component of the vector
+    pub fn yVecf(v: Vec3f) Vec3f {
+        return .{ 0, v[1], 0 };
+    }
+
+    /// Returns a vector of the z component of the vector
+    pub fn zVecf(v: Vec3f) Vec3f {
+        return .{ 0, 0, v[2] };
     }
 };
 

@@ -6,7 +6,7 @@
 // │                                                                           │
 // └───────────────────────────────────────────────────────────────────────────┘
 
-pub const CANVAS_SIZE: u32 = 160;
+pub const CANVAS_SIZE = 160;
 
 pub const BUTTON_1: u8 = 1;
 pub const BUTTON_2: u8 = 2;
