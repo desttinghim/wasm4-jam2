@@ -4,6 +4,7 @@
 //! - https://iquilezles.org/articles/distfunctions/
 const geom = @import("geom.zig");
 const std = @import("std");
+const zm = @import("zmath");
 
 pub const MarchOpt = struct {
     maxSteps: usize = 20,
@@ -14,16 +15,16 @@ pub const MarchOpt = struct {
 pub const MarchInfo = struct {
     iterations: usize,
     distance: f32,
-    point: ?geom.Vec3f,
+    point: ?zm.Vec,
 };
 
 /// Given a SDF scene, marches from rayOrigin in rayDirection until it the max number of iterations is hit,
 /// the max distance is hit, or a point was hit.
-pub fn raymarch(scene: fn (geom.Vec3f) f32, rayOrigin: geom.Vec3f, rayDirection: geom.Vec3f, opt: MarchOpt) MarchInfo {
+pub fn raymarch(scene: fn (zm.Vec) f32, rayOrigin: zm.Vec, rayDirection: zm.Vec, opt: MarchOpt) MarchInfo {
     var t: f32 = 0;
     var i: usize = 0;
     while (i < opt.maxSteps) : (i += 1) {
-        const p = rayOrigin + rayDirection * @splat(3, t);
+        const p = rayOrigin + rayDirection * @splat(4, t);
         const d = scene(p);
         if (d < opt.epsilon) return .{
             .iterations = i,
@@ -40,19 +41,22 @@ pub fn raymarch(scene: fn (geom.Vec3f) f32, rayOrigin: geom.Vec3f, rayDirection:
     };
 }
 
-pub fn getNormal(scene: fn (geom.Vec3f) f32, point: geom.Vec3f, opt: struct {h: f32 = 0.01}) geom.Vec3f {
-    const h = @splat(3, opt.h);
-    return geom.vec3.normalizef(.{
-        scene(point + geom.vec3.rightf * h) - scene(point - geom.vec3.rightf * h),
-        scene(point + geom.vec3.upf * h) - scene(point - geom.vec3.upf * h),
-        scene(point + geom.vec3.forwardf * h) - scene(point - geom.vec3.forwardf * h),
+pub fn getNormal(scene: fn (zm.Vec) f32, point: zm.Vec, opt: struct {h: f32 = 0.01}) zm.Vec {
+    const h = @splat(4, opt.h);
+    const right = zm.f32x4(1, 0, 0, 0);
+    const up = zm.f32x4(0, 1, 0, 0);
+    const forward  = zm.f32x4(0, 0, 1, 0);
+    return zm.normalize3(.{
+        scene(point + right * h) - scene(point - right * h),
+        scene(point + up * h) - scene(point - up * h),
+        scene(point + forward * h) - scene(point - forward * h),
     });
 }
 
-// pub fn shade(scene: fn(geom.Vec3f) f32, p: geom.Vec3) f32 {
+// pub fn shade(scene: fn(zm.Vec) f32, p: geom.Vec3) f32 {
 //     const normal = geom.vec3.normalize
 // }
 
-pub fn sphere(p: geom.Vec3f, radius: f32) f32 {
-    return geom.vec3.lengthf(p) - radius;
+pub fn sphere(p: zm.Vec, radius: f32) f32 {
+    return zm.length3(p)[0] - radius;
 }

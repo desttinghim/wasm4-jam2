@@ -37,11 +37,12 @@ export fn update() void {
 }
 
 var time: usize = 0;
-var sun = geom.vec3.normalizef(geom.Vec3f{ -1, -1, -2 });
 
 var h_angle: f32 = 0;
 var v_angle: f32 = 0;
 var position = [3]f32{ 0, 0, -10 };
+
+const sun = zm.normalize3(zm.loadArr3(.{ -1, -1, -2 }));
 
 fn update_safe() !void {
     defer time += 1;
@@ -88,27 +89,23 @@ fn update_safe() !void {
         // eye direction
         _forward,
         // up direction
-        // up,
-        zm.f32x4(0, 1, 0, 0),
+        zm.F32x4{ 0, 1, 0, 0 },
     );
 
     zm.storeArr3(position[0..], _position);
-
-    sun = geom.vec3.normalizef(geom.Vec3f{ -1, -1, -2 });
 
     var y: i32 = 0;
     while (y < w4.CANVAS_SIZE) : (y += 1) {
         var x: i32 = 0;
         while (x < w4.CANVAS_SIZE) : (x += 1) {
-            const ro = position;
-            const vd = rayDirection(45, @splat(2, @as(f32, w4.CANVAS_SIZE)), geom.vec2.itof(.{x,y}));
-            const rd_zm = zm.mul(world_to_view, zm.loadArr3(vd));
-            const rd = geom.Vec3f{rd_zm[0], rd_zm[1], rd_zm[2]};
+            const ro = _position;
+            const vd = rayDirection(std.math.pi / 6.0, @intToFloat(f32, x), @intToFloat(f32, y));
+            const rd = zm.mul(world_to_view, vd);
 
             const info = sdf.raymarch(scene, ro, rd, .{ .maxSteps = 5, .maxDistance = 100, .epsilon = 0.001 });
             if (info.point) |point| {
                 const normal = sdf.getNormal(scene, point, .{ .h = 0.0001 });
-                const dot = geom.vec3.dotf(normal, sun);
+                const dot = zm.dot3(normal, sun)[0];
                 if (dot < -0.5) {
                     w4.DRAW_COLORS.* = 4;
                 } else if (dot < 0) {
@@ -125,12 +122,15 @@ fn update_safe() !void {
     w4.DRAW_COLORS.* = 4;
 }
 
-fn rayDirection(fov: f32, size: geom.Vec2f, pos: geom.Vec2f) geom.Vec3f {
-    const xy = pos - size / @splat(2, @as(f32, 2));
+fn rayDirection(fov: f32, x: f32, y: f32) zm.Vec {
+    const size = zm.f32x4s(w4.CANVAS_SIZE / 2);
+    const pos = zm.loadArr2(.{x, y});
+    const xy = pos - size;
     const z = size[1] / @tan(fov) / 2;
-    return geom.vec3.normalizef(geom.Vec3f{ xy[0], xy[1], z });
+    return zm.normalize3(zm.loadArr3(.{ xy[0], xy[1], z }));
 }
 
-fn scene(point: geom.Vec3f) f32 {
-    return @minimum(sdf.sphere(point, 5), sdf.sphere(point + geom.Vec3f{ 6, 0, 5 }, 1));
+const sphere2 = zm.loadArr3(.{ 6, 0, 5 });
+fn scene(point: zm.Vec) f32 {
+    return @minimum(sdf.sphere(point, 5), sdf.sphere(point + sphere2, 1));
 }
