@@ -108,37 +108,64 @@ fn update_safe() !void {
     w4.DRAW_COLORS.* = 1;
     w4.rect(0, 0, 160, 160);
 
+    render(world_to_view, .{ 0, 0, w4.CANVAS_SIZE, w4.CANVAS_SIZE });
+
     // Render
-    var y: i32 = 0;
-    while (y < w4.CANVAS_SIZE) : (y += 4) {
-        var x: i32 = 0;
-        while (x < w4.CANVAS_SIZE) : (x += 4) {
+    w4.DRAW_COLORS.* = 4;
+}
+
+fn render(world_to_view: zm.Mat, area: geom.AABB) void {
+    // const res_half = @divTrunc(area[2], 2);
+    // const res_halfu = @intCast(u32, res_half);
+    const res_half = 2;
+    const res_halfu = @intCast(u32, res_half);
+    var y: i32 = area[0];
+    while (y < area[2]) : (y += res_half) {
+        var x: i32 = area[1];
+        while (x < area[3]) : (x += res_half) {
             const ro = @as(Vec3f, camera.position);
-            const vd = rayDirection(std.math.pi / 6.0, @intToFloat(f32, x + 2), @intToFloat(f32, y + 2));
+            const vd = rayDirection(std.math.pi / 6.0, @intToFloat(f32, x), @intToFloat(f32, y));
             const rdz = zm.mul(world_to_view, vd);
             const rd = geom.vec3.normalizef(Vec3f{ rdz[0], rdz[1], rdz[2] });
 
-            const info = sdf.coverageSearch(scene, ro, rd, 1, 20);
+            const info = sdf.coverageSearch(scene, ro, rd, 1.0, 100.0, .{.maxSteps = 12, .epsilon = 1});
             if (info.hit) {
-                const normal = sdf.getNormal(scene, info.pos, .{ .h = 0.0001 });
-                const dot = geom.vec3.dotf(normal, sun);
-                if (dot < -0.2) {
-                    w4.DRAW_COLORS.* = 4;
-                }
-                // else if (dot < 0.2) {
-                //     w4.DRAW_COLORS.* = 3 + @intCast(u16, @mod(y, 2));
-                // }
-                else if (dot > 0.8) {
-                    w4.DRAW_COLORS.* = 2;
-                } else {
-                    w4.DRAW_COLORS.* = 3;
-                }
-                // draw.pixel(x, y);
-                w4.rect(x,y,4,4);
+                shade(info.point, y);
+                w4.rect(x,y,res_halfu, res_halfu);
             }
+
+            // const info = sdf.raymarch(scene, ro, rd, .{ .maxSteps = 12, .maxDistance = 100, .epsilon = @intToFloat(f32, res_half) });
+            // if (info.point) |point| {
+            //     shade(point, y);
+            //     w4.rect(x, y, res_halfu, res_halfu);
+            //     if (res_half > 1) {
+            //         render(world_to_view, area + geom.Rect{ 0, 0, -res_half, -res_half });
+            //         render(world_to_view, area + geom.Rect{ res_half, 0, -res_half, -res_half });
+            //         render(world_to_view, area + geom.Rect{ res_half, res_half, -res_half, -res_half });
+            //         render(world_to_view, area + geom.Rect{ 0, res_half, -res_half, -res_half });
+            //     }
+            //     // draw.pixel(x, y);
+            // } else if (info.floor) {
+            //     w4.DRAW_COLORS.* = 1;
+            //     w4.rect(x, y, res_halfu, res_halfu);
+            //     // draw.pixel(x, y);
+            // }
         }
     }
-    w4.DRAW_COLORS.* = 4;
+}
+
+fn shade(point: Vec3f, y: i32) void {
+    const normal = sdf.getNormal(scene, point, .{ .h = 0.0001 });
+    const dot = geom.vec3.dotf(normal, sun);
+    if (dot < -0.2) {
+        w4.DRAW_COLORS.* = 4;
+    } else if (dot < 0.2) {
+        w4.DRAW_COLORS.* = 3 + @intCast(u16, @mod(y, 2));
+    } else if (dot > 0.8) {
+        w4.DRAW_COLORS.* = 2;
+    } else {
+        w4.DRAW_COLORS.* = 3;
+    }
 }
 
 fn rayDirection(fov: f32, x: f32, y: f32) zm.Vec {
