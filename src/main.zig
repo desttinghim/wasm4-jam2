@@ -3,6 +3,8 @@ const draw = @import("draw.zig");
 const sdf = @import("sdf.zig");
 const std = @import("std");
 const zm = @import("zmath");
+const geom = @import("geom.zig");
+const Vec3f = geom.Vec3f;
 
 const smiley = [8]u8{
     0b11000011,
@@ -41,7 +43,7 @@ var h_angle: f32 = 0;
 var v_angle: f32 = 0;
 var position = [3]f32{ 0, 0, -10 };
 
-const sun = zm.normalize3(zm.loadArr3(.{ -1, -1, -2 }));
+const sun = geom.vec3.normalizef(.{ -1, -1, -2 });
 
 fn update_safe() !void {
     defer time += 1;
@@ -102,14 +104,15 @@ fn update_safe() !void {
     while (y < w4.CANVAS_SIZE) : (y += 1) {
         var x: i32 = 0;
         while (x < w4.CANVAS_SIZE) : (x += 1) {
-            const ro = _position;
+            const ro: Vec3f = position;
             const vd = rayDirection(std.math.pi / 6.0, @intToFloat(f32, x), @intToFloat(f32, y));
-            const rd = zm.mul(world_to_view, vd);
+            const rdz = zm.mul(world_to_view, vd);
+            const rd = Vec3f{rdz[0], rdz[1], rdz[2]};
 
             const info = sdf.raymarch(scene, ro, rd, .{ .maxSteps = 10, .maxDistance = 15, .epsilon = 0.01 });
             if (info.point) |point| {
                 const normal = sdf.getNormal(scene, point, .{ .h = 0.0001 });
-                const dot = zm.dot3(normal, sun)[0];
+                const dot = geom.vec3.dotf(normal, sun);
                 if (dot < -0.2) {
                     w4.DRAW_COLORS.* = 4;
                 } else if (dot < 0.2) {
@@ -134,7 +137,8 @@ fn rayDirection(fov: f32, x: f32, y: f32) zm.Vec {
     return zm.normalize3(zm.loadArr3(.{ xy[0], xy[1], z }));
 }
 
-const sphere2 = zm.loadArr3(.{ 6, 0, 5 });
-fn scene(point: zm.Vec) f32 {
-    return @minimum(sdf.sphere(point, 5), sdf.sphere(point + sphere2, 1));
+const sphere2 = Vec3f{ 6, 0, 5 };
+fn scene(point: Vec3f) f32 {
+    const spheres = @minimum(sdf.sphere(point, 5), sdf.sphere(point + sphere2, 1));
+    return spheres;
 }
