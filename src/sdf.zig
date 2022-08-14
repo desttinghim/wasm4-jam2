@@ -2,7 +2,6 @@
 //! Referencess:
 //! - https://9bitscience.blogspot.com/2013/07/raymarching-distance-fields_14.html
 //! - https://iquilezles.org/articles/distfunctions/
-const geom = @import("geom.zig");
 const std = @import("std");
 const zm = @import("zmath");
 

@@ -1,7 +1,6 @@
 const w4 = @import("wasm4.zig");
 const draw = @import("draw.zig");
-const geom = @import("geom.zig");
-const sdf = @import("raymarch.zig");
+const sdf = @import("sdf.zig");
 const std = @import("std");
 const zm = @import("zmath");
 
@@ -94,6 +93,11 @@ fn update_safe() !void {
 
     zm.storeArr3(position[0..], _position);
 
+    // Clear the screen
+    w4.DRAW_COLORS.* = 1;
+    w4.rect(0,0,160,160);
+
+    // Render
     var y: i32 = 0;
     while (y < w4.CANVAS_SIZE) : (y += 1) {
         var x: i32 = 0;
@@ -102,21 +106,21 @@ fn update_safe() !void {
             const vd = rayDirection(std.math.pi / 6.0, @intToFloat(f32, x), @intToFloat(f32, y));
             const rd = zm.mul(world_to_view, vd);
 
-            const info = sdf.raymarch(scene, ro, rd, .{ .maxSteps = 5, .maxDistance = 100, .epsilon = 0.001 });
+            const info = sdf.raymarch(scene, ro, rd, .{ .maxSteps = 10, .maxDistance = 15, .epsilon = 0.01 });
             if (info.point) |point| {
                 const normal = sdf.getNormal(scene, point, .{ .h = 0.0001 });
                 const dot = zm.dot3(normal, sun)[0];
-                if (dot < -0.5) {
+                if (dot < -0.2) {
                     w4.DRAW_COLORS.* = 4;
-                } else if (dot < 0) {
+                } else if (dot < 0.2) {
                     w4.DRAW_COLORS.* = 3 + @intCast(u16, @mod(y, 2));
+                } else if (dot > 0.8) {
+                    w4.DRAW_COLORS.* = 2;
                 } else {
                     w4.DRAW_COLORS.* = 3;
                 }
-            } else {
-                w4.DRAW_COLORS.* = 1;
+                draw.pixel(x, y);
             }
-            draw.pixel(x, y);
         }
     }
     w4.DRAW_COLORS.* = 4;
