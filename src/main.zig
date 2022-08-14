@@ -43,6 +43,8 @@ var player_pos = [3]f32{ 0, 0, 0 };
 var time: usize = 0;
 const sun = geom.vec3.normalizef(.{ -1, -1, -2 });
 
+var distanceCache: [400]f32 = [_]f32{0} ** 400;
+
 fn update_safe() !void {
     defer time += 1;
 
@@ -108,31 +110,31 @@ fn update_safe() !void {
 
     // Render
     var y: i32 = 0;
-    while (y < w4.CANVAS_SIZE) : (y += 1) {
+    while (y < w4.CANVAS_SIZE) : (y += 4) {
         var x: i32 = 0;
-        while (x < w4.CANVAS_SIZE) : (x += 1) {
+        while (x < w4.CANVAS_SIZE) : (x += 4) {
             const ro = @as(Vec3f, camera.position);
-            const vd = rayDirection(std.math.pi / 6.0, @intToFloat(f32, x), @intToFloat(f32, y));
+            const vd = rayDirection(std.math.pi / 6.0, @intToFloat(f32, x + 2), @intToFloat(f32, y + 2));
             const rdz = zm.mul(world_to_view, vd);
-            const rd = Vec3f{ rdz[0], rdz[1], rdz[2] };
+            const rd = geom.vec3.normalizef(Vec3f{ rdz[0], rdz[1], rdz[2] });
 
-            const info = sdf.raymarch(scene, ro, rd, .{ .maxSteps = 12, .maxDistance = 100, .epsilon = 0.05 });
-            if (info.point) |point| {
-                const normal = sdf.getNormal(scene, point, .{ .h = 0.0001 });
+            const info = sdf.coverageSearch(scene, ro, rd, 1, 20);
+            if (info.hit) {
+                const normal = sdf.getNormal(scene, info.pos, .{ .h = 0.0001 });
                 const dot = geom.vec3.dotf(normal, sun);
                 if (dot < -0.2) {
                     w4.DRAW_COLORS.* = 4;
-                } else if (dot < 0.2) {
-                    w4.DRAW_COLORS.* = 3 + @intCast(u16, @mod(y, 2));
-                } else if (dot > 0.8) {
+                }
+                // else if (dot < 0.2) {
+                //     w4.DRAW_COLORS.* = 3 + @intCast(u16, @mod(y, 2));
+                // }
+                else if (dot > 0.8) {
                     w4.DRAW_COLORS.* = 2;
                 } else {
                     w4.DRAW_COLORS.* = 3;
                 }
-                draw.pixel(x, y);
-            } else if (info.floor) {
-                w4.DRAW_COLORS.* = 1;
-                draw.pixel(x, y);
+                // draw.pixel(x, y);
+                w4.rect(x,y,4,4);
             }
         }
     }
@@ -150,15 +152,11 @@ fn rayDirection(fov: f32, x: f32, y: f32) zm.Vec {
 const sphere2 = Vec3f{ 6, 0, 5 };
 const boxpos = Vec3f{ 10, 0, -10 };
 const boxsize = Vec3f{ 5, 5, 5 };
-const boxlen = geom.vec3.lengthf(boxsize);
+const boxsize2 = Vec3f{ 1, 1, 1 };
 fn scene(point: Vec3f) f32 {
-    const box = box: {
-        const approx = sdf.sphere(point + boxpos, boxlen);
-        if (approx > 1) break :box approx;
-        break :box sdf.box(point + boxpos, boxsize);
-    };
-    const spheres = @minimum(sdf.sphere(point, 5), sdf.sphere(point + sphere2, 1));
-    const player = sdf.sphere(point - @as(Vec3f, player_pos), 1);
+    const box = sdf.box(point + boxpos, boxsize);
+    const spheres = @minimum(sdf.box(point, boxsize), sdf.box(point + sphere2, boxsize2));
+    const player = sdf.box(point - @as(Vec3f, player_pos), boxsize2);
     const env = @minimum(box, spheres);
     return @minimum(player, env);
 }
