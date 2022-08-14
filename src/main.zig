@@ -111,7 +111,7 @@ fn update_safe() !void {
     while (y < w4.CANVAS_SIZE) : (y += 1) {
         var x: i32 = 0;
         while (x < w4.CANVAS_SIZE) : (x += 1) {
-            const ro: Vec3f = camera.position;
+            const ro = @as(Vec3f, camera.position);
             const vd = rayDirection(std.math.pi / 6.0, @intToFloat(f32, x), @intToFloat(f32, y));
             const rdz = zm.mul(world_to_view, vd);
             const rd = Vec3f{ rdz[0], rdz[1], rdz[2] };
@@ -148,8 +148,17 @@ fn rayDirection(fov: f32, x: f32, y: f32) zm.Vec {
 }
 
 const sphere2 = Vec3f{ 6, 0, 5 };
+const boxpos = Vec3f{ 10, 0, -10 };
+const boxsize = Vec3f{ 5, 5, 5 };
+const boxlen = geom.vec3.lengthf(boxsize);
 fn scene(point: Vec3f) f32 {
+    const box = box: {
+        const approx = sdf.sphere(point + boxpos, boxlen);
+        if (approx > 1) break :box approx;
+        break :box sdf.box(point + boxpos, boxsize);
+    };
     const spheres = @minimum(sdf.sphere(point, 5), sdf.sphere(point + sphere2, 1));
     const player = sdf.sphere(point - @as(Vec3f, player_pos), 1);
-    return @minimum(player, spheres);
+    const env = @minimum(box, spheres);
+    return @minimum(player, env);
 }
