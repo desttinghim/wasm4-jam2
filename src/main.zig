@@ -6,17 +6,6 @@ const zm = @import("zmath");
 const geom = @import("geom.zig");
 const Vec3f = geom.Vec3f;
 
-const smiley = [8]u8{
-    0b11000011,
-    0b10000001,
-    0b00100100,
-    0b00100100,
-    0b00000000,
-    0b00100100,
-    0b10011001,
-    0b11000011,
-};
-
 const FBA = std.heap.FixedBufferAllocator;
 
 var long_alloc_buffer: [4096]u8 = undefined;
@@ -37,12 +26,21 @@ export fn update() void {
     update_safe() catch unreachable;
 }
 
+const Camera = struct {
+    h_angle: f32,
+    v_angle: f32,
+    position: [3]f32,
+};
+
+var camera = Camera{
+    .h_angle = 0,
+    .v_angle = 0,
+    .position = [3]f32{ 0, 10, -10 },
+};
+
+var player_pos = [3]f32{ 0, 0, 0 };
+
 var time: usize = 0;
-
-var h_angle: f32 = 0;
-var v_angle: f32 = 0;
-var position = [3]f32{ 0, 0, -10 };
-
 const sun = geom.vec3.normalizef(.{ -1, -1, -2 });
 
 fn update_safe() !void {
@@ -54,62 +52,71 @@ fn update_safe() !void {
     _ = alloc;
     defer frame_fba[(time + 1) % 2].reset();
 
-    const _forward = zm.f32x4(
-        @cos(v_angle) * @sin(h_angle),
-        @sin(v_angle),
-        @cos(v_angle) * @cos(h_angle),
-        0,
-    );
-    const right = zm.f32x4(@sin(h_angle), 0, @cos(h_angle), 1);
-    const up = zm.cross3(right, _forward);
-    _ = up;
+    // const _forward = zm.f32x4(
+    //     @cos(camera.v_angle) * @sin(camera.h_angle),
+    //     @sin(camera.v_angle),
+    //     @cos(camera.v_angle) * @cos(camera.h_angle),
+    //     0,
+    // );
+    // const right = zm.f32x4(@sin(camera.h_angle), 0, @cos(camera.h_angle), 0);
+    // const up = zm.cross3(right, _forward);
+    // _ = up;
 
-    var _position = zm.loadArr3w(position, 1);
+    var _player_pos = zm.loadArr3w(player_pos, 1);
+    const north = zm.f32x4(1, 0, 0, 0);
+    const west = zm.f32x4(0, 0, 1, 0);
     const speed = @splat(4, @as(f32, 0.1));
 
     const gamepad = w4.GAMEPAD1.*;
     if (gamepad & w4.BUTTON_UP != 0) {
-        _position += _forward * speed;
+        _player_pos += north * speed;
     }
     if (gamepad & w4.BUTTON_DOWN != 0) {
-        _position -= _forward * speed;
+        _player_pos -= north * speed;
     }
     if (gamepad & w4.BUTTON_LEFT != 0) {
         // Left
-        h_angle = @mod(h_angle - 0.05, std.math.pi * 2.0);
+        // camera.h_angle -= 0.05;
+        _player_pos += west * speed;
     }
     if (gamepad & w4.BUTTON_RIGHT != 0) {
         // Right
-        h_angle = @mod(h_angle + 0.05, std.math.pi * 2.0);
+        // camera.h_angle += 0.05;
+        _player_pos -= west * speed;
     }
 
+    var _position = zm.loadArr3w(camera.position, 1);
+    const camera_offset = zm.f32x4(-5, -5, -5, 0);
+    _position = _player_pos + camera_offset;
+
     // Calculate position
-    const world_to_view = zm.lookToLh(
+    const world_to_view = zm.lookAtLh(
         // eye position
         _position,
         // eye direction
-        _forward,
+        _player_pos,
         // up direction
         zm.F32x4{ 0, 1, 0, 0 },
     );
 
-    zm.storeArr3(position[0..], _position);
+    zm.storeArr3(camera.position[0..], _position);
+    zm.storeArr3(player_pos[0..], _player_pos);
 
     // Clear the screen
     w4.DRAW_COLORS.* = 1;
-    w4.rect(0,0,160,160);
+    w4.rect(0, 0, 160, 160);
 
     // Render
     var y: i32 = 0;
     while (y < w4.CANVAS_SIZE) : (y += 1) {
         var x: i32 = 0;
         while (x < w4.CANVAS_SIZE) : (x += 1) {
-            const ro: Vec3f = position;
+            const ro: Vec3f = camera.position;
             const vd = rayDirection(std.math.pi / 6.0, @intToFloat(f32, x), @intToFloat(f32, y));
             const rdz = zm.mul(world_to_view, vd);
-            const rd = Vec3f{rdz[0], rdz[1], rdz[2]};
+            const rd = Vec3f{ rdz[0], rdz[1], rdz[2] };
 
-            const info = sdf.raymarch(scene, ro, rd, .{ .maxSteps = 10, .maxDistance = 15, .epsilon = 0.01 });
+            const info = sdf.raymarch(scene, ro, rd, .{ .maxSteps = 12, .maxDistance = 100, .epsilon = 0.05 });
             if (info.point) |point| {
                 const normal = sdf.getNormal(scene, point, .{ .h = 0.0001 });
                 const dot = geom.vec3.dotf(normal, sun);
@@ -131,7 +138,7 @@ fn update_safe() !void {
 
 fn rayDirection(fov: f32, x: f32, y: f32) zm.Vec {
     const size = zm.f32x4s(w4.CANVAS_SIZE / 2);
-    const pos = zm.loadArr2(.{x, y});
+    const pos = zm.loadArr2(.{ x, y });
     const xy = pos - size;
     const z = size[1] / @tan(fov) / 2;
     return zm.normalize3(zm.loadArr3(.{ xy[0], xy[1], z }));
@@ -140,5 +147,6 @@ fn rayDirection(fov: f32, x: f32, y: f32) zm.Vec {
 const sphere2 = Vec3f{ 6, 0, 5 };
 fn scene(point: Vec3f) f32 {
     const spheres = @minimum(sdf.sphere(point, 5), sdf.sphere(point + sphere2, 1));
-    return spheres;
+    const player = sdf.sphere(point - @as(Vec3f, player_pos), 1);
+    return @minimum(player, spheres);
 }
