@@ -17,6 +17,7 @@ pub const MarchInfo = struct {
     iterations: usize,
     distance: f32,
     point: ?Vec3f,
+    floor: bool,
 };
 
 /// Given a SDF scene, marches from rayOrigin in rayDirection until it the max number of iterations is hit,
@@ -31,6 +32,13 @@ pub fn raymarch(scene: fn (Vec3f) f32, rayOrigin: Vec3f, rayDirection: Vec3f, op
             .iterations = i,
             .distance = t,
             .point = p,
+            .floor = false,
+        };
+        if (t > 1.0 and p[1] + 10 <= opt.epsilon)  return .{
+            .iterations = i,
+            .distance = t,
+            .point = null,
+            .floor = true,
         };
         t += d;
         if (t > opt.maxDistance) break;
@@ -39,6 +47,7 @@ pub fn raymarch(scene: fn (Vec3f) f32, rayOrigin: Vec3f, rayDirection: Vec3f, op
         .iterations = i,
         .distance = t,
         .point = null,
+        .floor = false,
     };
 }
 
@@ -56,10 +65,5 @@ pub fn sphere(p: Vec3f, radius: f32) f32 {
 }
 
 pub fn plane(p: Vec3f, n: Vec3f, h: f32) f32 {
-    return zm.dot3(p, n)[0] + h;
-}
-
-pub fn fastInverseSqrt(number: f32) f32 {
-    const y = @bitCast(f32, 0x5f3759df - (@bitCast(u32, number) >> 1));
-    return y * (1.5 - (number - 0.5 * y * y));
+    return geom.vec3.lengthf(p, n)[0] + h;
 }

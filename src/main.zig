@@ -86,7 +86,7 @@ fn update_safe() !void {
     }
 
     var _position = zm.loadArr3w(camera.position, 1);
-    const camera_offset = zm.f32x4(-5, -5, -5, 0);
+    const camera_offset = zm.f32x4(-5, -10, -5, 0);
     _position = _player_pos + camera_offset;
 
     // Calculate position
@@ -129,6 +129,9 @@ fn update_safe() !void {
                 } else {
                     w4.DRAW_COLORS.* = 3;
                 }
+                draw.pixel(x, y);
+            } else if (info.floor) {
+                w4.DRAW_COLORS.* = 1;
                 draw.pixel(x, y);
             }
         }
