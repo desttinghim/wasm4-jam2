@@ -3,6 +3,7 @@ const draw = @import("draw.zig");
 const std = @import("std");
 const geom = @import("geom.zig");
 const input = @import("input.zig");
+const tiles = @import("tiles.zig");
 
 const FBA = std.heap.FixedBufferAllocator;
 
@@ -71,6 +72,15 @@ fn update_safe() !void {
 
     if ((player.pos + player.size + player.offset)[1] < 127) {
         player.pos[1] += 1;
+    }
+
+    w4.DRAW_COLORS.* = 0x1234;
+    var x: isize = 0;
+    while (x < 10) : (x += 1) {
+        var y: isize = 0;
+        while (y < 10) : (y += 1) {
+            tiles.blit(geom.Vec2{ x, y } * tiles.tile_size, 0);
+        }
     }
 
     // Render

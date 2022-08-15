@@ -5,13 +5,18 @@ const pkgs = struct {
         .name = "zmath",
         .source = .{ .path = "deps/zmath/src/zmath.zig" },
     };
+    const assets = std.build.Pkg{
+        .name = "assets",
+        .source = .{ .path = "assets/tiles.zig" },
+    };
 };
 
 pub fn build(b: *std.build.Builder) !void {
     const mode = b.standardReleaseOptions();
     const lib = b.addSharedLibrary("cart", "src/main.zig", .unversioned);
 
-    lib.addPackage(pkgs.zmath);
+    // lib.addPackage(pkgs.zmath);
+    lib.addPackage(pkgs.assets);
 
     lib.setBuildMode(mode);
     lib.setTarget(.{ .cpu_arch = .wasm32, .os_tag = .freestanding });
