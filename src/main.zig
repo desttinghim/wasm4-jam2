@@ -2,6 +2,7 @@ const w4 = @import("wasm4.zig");
 const draw = @import("draw.zig");
 const std = @import("std");
 const geom = @import("geom.zig");
+const input = @import("input.zig");
 
 const FBA = std.heap.FixedBufferAllocator;
 
@@ -52,12 +53,22 @@ var time: usize = 0;
 
 fn update_safe() !void {
     defer time += 1;
+    defer input.update();
 
+    // Memory management
     // Switch frame allocator every frame
     const which_alloc = time % 2;
     const alloc = frame_alloc[which_alloc];
     _ = alloc;
     defer frame_fba[(time + 1) % 2].reset();
 
+    // Input
+    const speed = 80 / 60;
+    if (input.btn(.one, .up)) player.pos[1] -= speed;
+    if (input.btn(.one, .left)) player.pos[0] -= speed;
+    if (input.btn(.one, .right)) player.pos[0] += speed;
+    if (input.btn(.one, .down)) player.pos[1] += speed;
+
+        // Render
     player.render();
 }
