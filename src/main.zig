@@ -5,6 +5,9 @@ const geom = @import("geom.zig");
 const input = @import("input.zig");
 const tiles = @import("tiles.zig");
 
+const builtin = @import("builtin");
+const debug = builtin.mode == .Debug;
+
 const FBA = std.heap.FixedBufferAllocator;
 
 var long_alloc_buffer: [4096]u8 = undefined;
@@ -75,19 +78,11 @@ fn update_safe() !void {
     if (input.btn(.one, .right)) player.pos[0] += speed;
     if (input.btn(.one, .down)) player.pos[1] += speed;
 
-    // if ((player.pos + player.size + player.offset)[1] < 127) {
-    //     player.pos[1] += 1;
-    // }
-
     // Collision
-    const cols = collide(player);
-    for (cols.items[0..cols.len]) |col| {
-        const pos = geom.vec2.ftoi(geom.aabb.posf(col));
-        const size = geom.vec2.ftoi(geom.aabb.sizef(col));
-        w4.DRAW_COLORS.* = 0x0040;
-        w4.rect(pos[0], pos[1], @intCast(u32, size[0]), @intCast(u32, size[1]));
-    }
-    if (cols.len > 0) player.pos = player.last_pos;
+    const hcols = collide(geom.Vec2f{player.pos[0], player.last_pos[1]} + geom.aabb.posf(player.rect), player.size);
+    const vcols = collide(geom.Vec2f{player.last_pos[0], player.pos[1]} + geom.aabb.posf(player.rect), player.size);
+    if (hcols.len > 0) player.pos[0] = player.last_pos[0];
+    if (vcols.len > 0) player.pos[1] = player.last_pos[1];
     player.last_pos = player.pos;
 
     w4.DRAW_COLORS.* = 0x1234;
@@ -101,7 +96,21 @@ fn update_safe() !void {
 
     // Render
     player.render();
-    w4.rect(0, 128, 160, 8);
+
+    if (debug) {
+        for (hcols.items[0..hcols.len]) |col| {
+            const pos = geom.vec2.ftoi(geom.aabb.posf(col));
+            const size = geom.vec2.ftoi(geom.aabb.sizef(col));
+            w4.DRAW_COLORS.* = 0x0040;
+            w4.rect(pos[0], pos[1], @intCast(u32, size[0]), @intCast(u32, size[1]));
+        }
+        for (vcols.items[0..vcols.len]) |col| {
+            const pos = geom.vec2.ftoi(geom.aabb.posf(col));
+            const size = geom.vec2.ftoi(geom.aabb.sizef(col));
+            w4.DRAW_COLORS.* = 0x0040;
+            w4.rect(pos[0], pos[1], @intCast(u32, size[0]), @intCast(u32, size[1]));
+        }
+    }
 }
 
 const level = [_][10]u8{
@@ -121,10 +130,10 @@ pub fn isSolid(tile: u8) bool {
     return tile > 0;
 }
 
-pub fn collide(body: Actor) CollisionInfo {
+pub fn collide(pos: geom.Vec2f, size: geom.Vec2f) CollisionInfo {
     const tile_sizef = geom.vec2.itof(tiles.tile_size);
-    const top_left = (body.pos + geom.aabb.posf(body.rect)) / tile_sizef;
-    const bot_right = top_left + geom.aabb.sizef(body.rect) / tile_sizef;
+    const top_left = pos / tile_sizef;
+    const bot_right = top_left + size / tile_sizef;
     var collisions = CollisionInfo.init();
 
     var i: isize = @floatToInt(i32, top_left[0]);
