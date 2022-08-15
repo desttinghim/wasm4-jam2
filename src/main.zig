@@ -63,7 +63,7 @@ fn update_safe() !void {
     defer frame_fba[(time + 1) % 2].reset();
 
     // Input
-    const speed = 80 / 60;
+    const speed = 80.0 / 60.0;
     if (input.btn(.one, .up)) player.pos[1] -= speed;
     if (input.btn(.one, .left)) player.pos[0] -= speed;
     if (input.btn(.one, .right)) player.pos[0] += speed;
