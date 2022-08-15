@@ -19,7 +19,30 @@ const frame_alloc: [2]std.mem.Allocator = .{
     frame_fba[1].allocator(),
 };
 
-var player = geom.Vec2f{ 80, 80 };
+const Actor = struct {
+    image: ?draw.Blit,
+    pos: geom.Vec2f,
+    offset: geom.Vec2f,
+    size: geom.Vec2f,
+
+    pub fn render(this: Actor) void {
+        const pos = geom.vec2.ftoi(this.pos + this.offset);
+        const size = geom.vec2.ftoi(this.size);
+        if (this.image) |image| {
+            image.blit(pos);
+        } else {
+            w4.DRAW_COLORS.* = 4;
+            w4.oval(pos[0], pos[1], size[0], size[1]);
+        }
+    }
+};
+
+var player = Actor{
+    .pos = geom.Vec2f{ 80, 80 },
+    .offset = geom.Vec2f{ -8, -8 },
+    .image = null,
+    .size = .{ 16, 16 },
+};
 
 export fn update() void {
     update_safe() catch unreachable;
@@ -36,6 +59,5 @@ fn update_safe() !void {
     _ = alloc;
     defer frame_fba[(time + 1) % 2].reset();
 
-    w4.DRAW_COLORS.* = 4;
-    w4.oval(@floatToInt(i32, player[0]), @floatToInt(i32, player[1]), 16, 16);
+    player.render();
 }
