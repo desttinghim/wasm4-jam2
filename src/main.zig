@@ -79,7 +79,7 @@ fn update_safe() !void {
     while (x < 10) : (x += 1) {
         var y: isize = 0;
         while (y < 10) : (y += 1) {
-            tiles.blit(geom.Vec2{ x, y } * tiles.tile_size, 0);
+            tiles.blit(geom.Vec2{ x, y } * tiles.tile_size, level[@intCast(usize, y)][@intCast(usize, x)]);
         }
     }
 
@@ -87,3 +87,16 @@ fn update_safe() !void {
     player.render();
     w4.rect(0, 128, 160, 8);
 }
+
+const level = [_][10]u8{
+    .{ 0, 1, 2, 3, 0, 0, 0, 0, 0, 0, },
+    .{ 0, 18, 19, 20, 0, 0, 0, 0, 0, 0, },
+    .{ 0, 35, 36, 37, 0, 0, 0, 0, 0, 0, },
+    .{ 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, },
+    .{ 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, },
+    .{ 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, },
+    .{ 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, },
+    .{ 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, },
+    .{ 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, },
+    .{ 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, },
+};
