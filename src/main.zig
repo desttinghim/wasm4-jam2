@@ -59,5 +59,10 @@ fn update_safe() !void {
     _ = alloc;
     defer frame_fba[(time + 1) % 2].reset();
 
+    if ((player.pos + player.size + player.offset)[1] < 127) {
+        player.pos[1] += 1;
+    }
+
     player.render();
+    w4.rect(0, 128, 160, 8);
 }
