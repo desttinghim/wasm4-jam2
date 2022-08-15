@@ -23,9 +23,12 @@ const frame_alloc: [2]std.mem.Allocator = .{
 
 const Actor = struct {
     image: ?draw.Blit,
-    pos: geom.Vec2f,
     offset: geom.Vec2f,
     size: geom.Vec2f,
+
+    pos: geom.Vec2f,
+    last_pos: geom.Vec2f,
+    rect: geom.AABBf,
 
     pub fn render(this: Actor) void {
         const pos = geom.vec2.ftoi(this.pos + this.offset);
@@ -41,6 +44,8 @@ const Actor = struct {
 
 var player = Actor{
     .pos = geom.Vec2f{ 80, 80 },
+    .last_pos = geom.Vec2f{ 80, 80 },
+    .rect = geom.AABBf{-3, -3, 6, 6},
     .offset = geom.Vec2f{ -8, -8 },
     .image = null,
     .size = .{ 16, 16 },
@@ -70,9 +75,20 @@ fn update_safe() !void {
     if (input.btn(.one, .right)) player.pos[0] += speed;
     if (input.btn(.one, .down)) player.pos[1] += speed;
 
-    if ((player.pos + player.size + player.offset)[1] < 127) {
-        player.pos[1] += 1;
+    // if ((player.pos + player.size + player.offset)[1] < 127) {
+    //     player.pos[1] += 1;
+    // }
+
+    // Collision
+    const cols = collide(player);
+    for (cols.items[0..cols.len]) |col| {
+        const pos = geom.vec2.ftoi(geom.aabb.posf(col));
+        const size = geom.vec2.ftoi(geom.aabb.sizef(col));
+        w4.DRAW_COLORS.* = 0x0040;
+        w4.rect(pos[0], pos[1], @intCast(u32, size[0]), @intCast(u32, size[1]));
     }
+    if (cols.len > 0) player.pos = player.last_pos;
+    player.last_pos = player.pos;
 
     w4.DRAW_COLORS.* = 0x1234;
     var x: isize = 0;
@@ -99,4 +115,50 @@ const level = [_][10]u8{
     .{ 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, },
     .{ 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, },
     .{ 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, },
+};
+
+pub fn isSolid(tile: u8) bool {
+    return tile > 0;
+}
+
+pub fn collide(body: Actor) CollisionInfo {
+    const tile_sizef = geom.vec2.itof(tiles.tile_size);
+    const top_left = (body.pos + geom.aabb.posf(body.rect)) / tile_sizef;
+    const bot_right = top_left + geom.aabb.sizef(body.rect) / tile_sizef;
+    var collisions = CollisionInfo.init();
+
+    var i: isize = @floatToInt(i32, top_left[0]);
+    while (i <= @floatToInt(i32, bot_right[0])) : (i += 1) {
+        var a: isize = @floatToInt(i32, top_left[1]);
+        while (a <= @floatToInt(i32, bot_right[1])) : (a += 1) {
+            const x = @intCast(usize, i);
+            const y = @intCast(usize, a);
+            const tile = level[y][x];
+            const tilepos = geom.vec2.itof(geom.Vec2{i, a} * tiles.tile_size);
+
+            if (isSolid(tile)) {
+                collisions.append(geom.aabb.initvf(tilepos, tile_sizef));
+            }
+        }
+    }
+
+    return collisions;
+}
+
+pub const CollisionInfo = struct {
+    len: usize,
+    items: [9]geom.AABBf,
+
+    pub fn init() CollisionInfo {
+        return CollisionInfo{
+            .len = 0,
+            .items = undefined,
+        };
+    }
+
+    pub fn append(col: *CollisionInfo, item: geom.AABBf) void {
+        std.debug.assert(col.len < 9);
+        col.items[col.len] = item;
+        col.len += 1;
+    }
 };
