@@ -54,6 +54,12 @@ var player = Actor{
     .size = .{ 16, 16 },
 };
 
+export fn start() void {
+    if (debug) {
+        w4.tracef("tilemap_size = (%d, %d)", tiles.tilemap_size[0], tiles.tilemap_size[1]);
+    }
+}
+
 export fn update() void {
     update_safe() catch unreachable;
 }
@@ -130,6 +136,14 @@ pub fn isSolid(tile: u8) bool {
     return tile > 0;
 }
 
+pub fn isInScreenBounds(x: i32, y: i32) bool {
+    return x > 0 and y > 0 and x < w4.CANVAS_SIZE and y < w4.CANVAS_SIZE;
+}
+
+pub fn isInMapBounds(x: i32, y:i32) bool {
+    return x > 0 and y > 0 and x < 10 and y < 10;
+}
+
 pub fn collide(pos: geom.Vec2f, size: geom.Vec2f) CollisionInfo {
     const tile_sizef = geom.vec2.itof(tiles.tile_size);
     const top_left = pos / tile_sizef;
@@ -140,6 +154,7 @@ pub fn collide(pos: geom.Vec2f, size: geom.Vec2f) CollisionInfo {
     while (i <= @floatToInt(i32, bot_right[0])) : (i += 1) {
         var a: isize = @floatToInt(i32, top_left[1]);
         while (a <= @floatToInt(i32, bot_right[1])) : (a += 1) {
+            if (!isInMapBounds(i, a)) continue;
             const x = @intCast(usize, i);
             const y = @intCast(usize, a);
             const tile = level[y][x];
