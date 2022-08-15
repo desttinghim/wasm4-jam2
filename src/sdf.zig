@@ -173,6 +173,29 @@ pub fn getNormal(scene: fn (geom.Vec3f) f32, point: geom.Vec3f, opt: struct { h:
     });
 }
 
+// float projectSphere( in vec4 sph,  // sphere in world space
+//                      in mat4 cam,  // camera matrix (world to camera)
+//                      in float fl ) // projection (focal length)
+// {
+//     // transform to camera space
+//     vec3  o = (cam*vec4(sph.xyz,1.0)).xyz;
+
+//     float r2 = sph.w*sph.w;
+//     float z2 = o.z*o.z;
+//     float l2 = dot(o,o);
+
+//     return -3.14159*fl*fl*r2*sqrt(abs((l2-r2)/(r2-z2)))/(r2-z2);
+// }
+pub fn sphereProjection(sph: zm.Vec, cam: zm.Mat, focalLength: f32) f32 {
+    const o = zm.mul(cam, zm.Vec{sph[0],sph[1],sph[2],1});
+
+    const r2 = sph[3] * sph[3];
+    const z2 = o[2]*o[2];
+    const l2 = zm.dot3(o,o)[0];
+
+    return std.math.pi * focalLength * focalLength * r2 * @sqrt(@fabs((l2-r2)/(r2-z2)))/(r2-z2);
+}
+
 pub fn sphere(p: Vec3f, radius: f32) f32 {
     return geom.vec3.lengthf(p) - radius;
 }

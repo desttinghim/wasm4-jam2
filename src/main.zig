@@ -22,6 +22,69 @@ const frame_alloc: [2]std.mem.Allocator = .{
     frame_fba[1].allocator(),
 };
 
+// const SceneObjectType = union(enum) {
+//     // Radius
+//     sphere: f32,
+//     // Axis aligned box
+//     aabb: Vec3f,
+// };
+
+// const SceneObject = struct {
+//     pos: Vec3f,
+//     type: SceneObjectType,
+// };
+
+// const Bounds = struct {
+//     pos: Vec3f,
+//     extents: Vec3f,
+//     pub fn fromSphere(pos: Vec3f, radius: f32) Bounds {
+//         return .{.pos = pos, .extents = @splat(3, radius)};
+//     }
+//     pub fn fromAABB(pos: Vec3f, extents: Vec3f) Bounds {
+//         return .{.pos = pos, .extents = extents};
+//     }
+//     pub fn contains(bounds: Bounds, point: Vec3f) bool {
+//         const top = bounds.pos + bounds.extents;
+//         const bot = bounds.pos - bounds.extents;
+//         return @reduce(.And, point > bot) and @reduce(.And, point < top);
+//     };
+//     pub fn containsBound(bounds: Bounds, inner: Bounds) bool {
+//         const top = inner.pos + inner.extents;
+//         const bot = inner.pos - inner.extents;
+//         return bounds.contains(top) and bounds.contains(bot);
+//     };
+//     pub fn expandToContain(bounds: Bounds, inner: Bounds) bool {
+//         const top = inner.pos + inner.extents;
+//         const bot = inner.pos - inner.extents;
+//         return bounds.contains(top) and bounds.contains(bot);
+//     };
+// };
+
+// const scene_data = [_]SceneObject{
+//     .{.pos = .{10,0,0}, .type = .{.sphere = 3}},
+//     .{.pos = .{0,0,10}, .type = .{.sphere = 3}},
+//     .{.pos = .{10,0,10}, .type = .{.aabb = .{3, 3,3}}}
+// };
+
+// var scene: []SceneObject = scene_data[0..];
+// var bounds: []Bounds = undefined;
+
+// export fn start() void {
+//     start_safe() catch unreachable;
+// }
+
+// fn start_safe() !void {
+//     bounds = try long_alloc.alloc(Bounds, scene_data.len + 1);
+//     const lastbound = &bounds[bounds.len];
+//     for(scene) |obj,i| {
+//         bounds[i] = switch(obj.type) {
+//             .sphere => |s| bounds.fromSphere(obj.pos, s),
+//             .aabb => |v| bounds.fromAABB(obj.pos, v),
+//         };
+//         if (bounds.contains(bounds[i]))
+//     }
+// }
+
 export fn update() void {
     update_safe() catch unreachable;
 }
@@ -117,38 +180,27 @@ fn update_safe() !void {
 fn render(world_to_view: zm.Mat, area: geom.AABB) void {
     // const res_half = @divTrunc(area[2], 2);
     // const res_halfu = @intCast(u32, res_half);
-    const res_half = 2;
-    const res_halfu = @intCast(u32, res_half);
+    const res_half = 1;
+    // const res_halfu = @intCast(u32, res_half);
     var y: i32 = area[0];
     while (y < area[2]) : (y += res_half) {
         var x: i32 = area[1];
         while (x < area[3]) : (x += res_half) {
-            const ro = @as(Vec3f, camera.position);
-            const vd = rayDirection(std.math.pi / 6.0, @intToFloat(f32, x), @intToFloat(f32, y));
-            const rdz = zm.mul(world_to_view, vd);
-            const rd = geom.vec3.normalizef(Vec3f{ rdz[0], rdz[1], rdz[2] });
+            // const ro = @as(Vec3f, camera.position);
+            // const vd = rayDirection(std.math.pi / 6.0, @intToFloat(f32, x), @intToFloat(f32, y));
+            // const rdz = zm.mul(world_to_view, vd);
+            // const rd = geom.vec3.normalizef(Vec3f{ rdz[0], rdz[1], rdz[2] });
 
-            const info = sdf.coverageSearch(scene, ro, rd, 1.0, 100.0, .{.maxSteps = 12, .epsilon = 1});
-            if (info.hit) {
-                shade(info.point, y);
-                w4.rect(x,y,res_halfu, res_halfu);
+            const sph = sdf.sphereProjection(.{0,0,0,5}, world_to_view, std.math.pi / 6.0);
+            if (sph > 0) {
+                w4.DRAW_COLORS.* = 4;
+                draw.pixel(x,y);
             }
 
-            // const info = sdf.raymarch(scene, ro, rd, .{ .maxSteps = 12, .maxDistance = 100, .epsilon = @intToFloat(f32, res_half) });
-            // if (info.point) |point| {
-            //     shade(point, y);
-            //     w4.rect(x, y, res_halfu, res_halfu);
-            //     if (res_half > 1) {
-            //         render(world_to_view, area + geom.Rect{ 0, 0, -res_half, -res_half });
-            //         render(world_to_view, area + geom.Rect{ res_half, 0, -res_half, -res_half });
-            //         render(world_to_view, area + geom.Rect{ res_half, res_half, -res_half, -res_half });
-            //         render(world_to_view, area + geom.Rect{ 0, res_half, -res_half, -res_half });
-            //     }
-            //     // draw.pixel(x, y);
-            // } else if (info.floor) {
-            //     w4.DRAW_COLORS.* = 1;
-            //     w4.rect(x, y, res_halfu, res_halfu);
-            //     // draw.pixel(x, y);
+            // const info = sdf.coverageSearch(scene, ro, rd, 1.0, 100.0, .{.maxSteps = 12, .epsilon = 1});
+            // if (info.hit) {
+            //     shade(info.point, y);
+            //     w4.rect(x,y,res_halfu, res_halfu);
             // }
         }
     }
