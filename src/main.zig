@@ -69,6 +69,11 @@ fn update_safe() !void {
     if (input.btn(.one, .right)) player.pos[0] += speed;
     if (input.btn(.one, .down)) player.pos[1] += speed;
 
-        // Render
+    if ((player.pos + player.size + player.offset)[1] < 127) {
+        player.pos[1] += 1;
+    }
+
+    // Render
     player.render();
+    w4.rect(0, 128, 160, 8);
 }
