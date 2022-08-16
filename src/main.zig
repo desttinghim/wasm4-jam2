@@ -48,7 +48,7 @@ const Actor = struct {
 var player = Actor{
     .pos = geom.Vec2f{ 80, 80 },
     .last_pos = geom.Vec2f{ 80, 80 },
-    .rect = geom.AABBf{-3, -3, 6, 6},
+    .rect = geom.AABBf{ -3, -3, 6, 6 },
     .offset = geom.Vec2f{ -8, -8 },
     .image = null,
     .size = .{ 16, 16 },
@@ -85,8 +85,8 @@ fn update_safe() !void {
     if (input.btn(.one, .down)) player.pos[1] += speed;
 
     // Collision
-    const hcols = collide(geom.Vec2f{player.pos[0], player.last_pos[1]} + geom.aabb.posf(player.rect), player.size);
-    const vcols = collide(geom.Vec2f{player.last_pos[0], player.pos[1]} + geom.aabb.posf(player.rect), player.size);
+    const hcols = collide(geom.Vec2f{ player.pos[0], player.last_pos[1] } + geom.aabb.posf(player.rect), geom.aabb.sizef(player.rect));
+    const vcols = collide(geom.Vec2f{ player.last_pos[0], player.pos[1] } + geom.aabb.posf(player.rect), geom.aabb.sizef(player.rect));
     if (hcols.len > 0) player.pos[0] = player.last_pos[0];
     if (vcols.len > 0) player.pos[1] = player.last_pos[1];
     player.last_pos = player.pos;
@@ -120,16 +120,16 @@ fn update_safe() !void {
 }
 
 const level = [_][10]u8{
-    .{ 0, 1, 2, 3, 0, 0, 0, 0, 0, 0, },
-    .{ 0, 18, 19, 20, 0, 0, 0, 0, 0, 0, },
-    .{ 0, 35, 36, 37, 0, 0, 0, 0, 0, 0, },
-    .{ 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, },
-    .{ 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, },
-    .{ 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, },
-    .{ 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, },
-    .{ 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, },
-    .{ 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, },
-    .{ 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, },
+    .{ 0, 1, 2, 3, 0, 0, 0, 0, 0, 0 },
+    .{ 0, 18, 19, 20, 0, 0, 0, 0, 0, 0 },
+    .{ 0, 35, 36, 37, 0, 0, 0, 0, 0, 0 },
+    .{ 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 },
+    .{ 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 },
+    .{ 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 },
+    .{ 0, 0, 0, 0, 0, 1, 2, 3, 0, 0 },
+    .{ 0, 0, 0, 0, 0, 18, 19, 20, 0, 0 },
+    .{ 0, 0, 0, 0, 0, 35, 36, 37, 0, 0 },
+    .{ 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 },
 };
 
 pub fn isSolid(tile: u8) bool {
@@ -137,11 +137,11 @@ pub fn isSolid(tile: u8) bool {
 }
 
 pub fn isInScreenBounds(x: i32, y: i32) bool {
-    return x > 0 and y > 0 and x < w4.CANVAS_SIZE and y < w4.CANVAS_SIZE;
+    return x >= 0 and y >= 0 and x < w4.CANVAS_SIZE and y < w4.CANVAS_SIZE;
 }
 
-pub fn isInMapBounds(x: i32, y:i32) bool {
-    return x > 0 and y > 0 and x < 10 and y < 10;
+pub fn isInMapBounds(x: i32, y: i32) bool {
+    return x >= 0 and y >= 0 and x < 10 and y < 10;
 }
 
 pub fn collide(pos: geom.Vec2f, size: geom.Vec2f) CollisionInfo {
@@ -158,7 +158,7 @@ pub fn collide(pos: geom.Vec2f, size: geom.Vec2f) CollisionInfo {
             const x = @intCast(usize, i);
             const y = @intCast(usize, a);
             const tile = level[y][x];
-            const tilepos = geom.vec2.itof(geom.Vec2{i, a} * tiles.tile_size);
+            const tilepos = geom.vec2.itof(geom.Vec2{ i, a } * tiles.tile_size);
 
             if (isSolid(tile)) {
                 collisions.append(geom.aabb.initvf(tilepos, tile_sizef));
