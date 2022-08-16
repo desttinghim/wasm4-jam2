@@ -31,13 +31,12 @@ const Actor = struct {
     animator: Anim,
     image: ?draw.Blit,
     offset: geom.Vec2f,
-    size: geom.Vec2f,
 
     pos: geom.Vec2f,
     last_pos: geom.Vec2f,
     rect: geom.AABBf,
     shadow: geom.AABBf,
-    facing: enum {Down, Left, Right, Up} = .Left,
+    facing: enum { Down, Left, Right, Up } = .Left,
 
     pub fn render(this: *Actor) void {
         const pos = geom.vec2.ftoi(this.pos + this.offset);
@@ -63,12 +62,17 @@ const Combat = struct {
     last_attack: usize = 0,
     combo: u8 = 0,
 
+    image: draw.Blit,
+    offset: geom.Vec2f,
     punch_down: [2][]const Anim.Ops,
     punch_side: [2][]const Anim.Ops,
 
     pub fn update(this: *Combat, now: usize) void {
-        if (now - this.last_attacking > 45) {
+        if (now - this.last_attacking > 45 and this.is_attacking) {
             this.combo = 0;
+            this.is_attacking = false;
+            this.actor.image = player_blit;
+            this.actor.offset = player_offset;
         }
     }
 
@@ -80,10 +84,13 @@ const Combat = struct {
         if (now - this.last_attacking <= 20) {
             this.combo +|= 1;
         }
+        this.actor.image = this.image;
+        this.actor.offset = this.offset;
         if (this.actor.facing == .Down) {
             this.actor.animator.play(this.punch_down[this.last_attack]);
         } else {
             this.actor.animator.play(this.punch_side[this.last_attack]);
+            this.actor.image.?.flags.flip_x = this.actor.facing == .Left;
         }
         this.is_attacking = true;
         this.last_attacking = now;
@@ -91,6 +98,8 @@ const Combat = struct {
     }
 };
 
+const player_blit = draw.Blit.init_frame(world.player_style, &world.player_bmp, .{ .bpp = .b2 }, .{ 16, 16 }, 0);
+const player_offset = geom.Vec2f{ -8, -12 };
 var player = Actor{
     .animator = .{ .anim = &world.player_anim_walk_down },
     .pos = geom.Vec2f{ 80, 80 },
@@ -98,13 +107,14 @@ var player = Actor{
     .rect = geom.AABBf{ -3, -3, 6, 6 },
     .shadow = geom.AABBf{ -6.5, 1, 12, 5 },
     .offset = geom.Vec2f{ -8, -12 },
-    .image = draw.Blit.init_frame(world.player_style, &world.player_bmp, .{ .bpp = .b2 }, .{ 16, 16 }, 0),
-    .size = .{ 16, 16 },
+    .image = player_blit,
 };
 var player_combat = Combat{
     .actor = &player,
-    .punch_down = .{&world.player_anim_punch_down, &world.player_anim_punch_down2},
-    .punch_side = .{&world.player_anim_punch_side, &world.player_anim_punch_side2},
+    .offset = geom.Vec2f{ -16, -20 },
+    .image = draw.Blit.init_frame(world.player_style, &world.player_punch_bmp, .{ .bpp = .b2 }, .{ 32, 32 }, 0),
+    .punch_down = .{ &world.player_anim_punch_down, &world.player_anim_punch_down2 },
+    .punch_side = .{ &world.player_anim_punch_side, &world.player_anim_punch_side2 },
 };
 
 var room: world.Room = undefined;
@@ -183,7 +193,7 @@ fn update_safe() !void {
         player.facing = .Down;
         player.pos[1] += speed;
     }
-    if (input.btnp(.one, .z)){
+    if (input.btnp(.one, .z)) {
         player_combat.startAttack(time);
     }
     player_combat.update(time);
@@ -195,6 +205,7 @@ fn update_safe() !void {
     if (vcols.len > 0) player.pos[1] = player.last_pos[1];
 
     if (player.isMoving()) {
+        if (player.facing == .Up) player.animator.play(&world.player_anim_walk_up);
         if (player.facing == .Down) player.animator.play(&world.player_anim_walk_down);
         if (player.facing == .Left) {
             player.image.?.flags.flip_x = true;
@@ -205,8 +216,11 @@ fn update_safe() !void {
             player.animator.play(&world.player_anim_walk_side);
         }
     } else {
-        if (player.facing == .Down) player.animator.play(&world.player_anim_stand_down);
-        if (player.facing == .Left or player.facing == .Right) player.animator.play(&world.player_anim_stand_side);
+        if (!player_combat.is_attacking) {
+            if (player.facing == .Down) { player.animator.play(&world.player_anim_stand_down); }
+            else if (player.facing == .Left or player.facing == .Right) { player.animator.play(&world.player_anim_stand_side); }
+            else {player.animator.play(&world.player_anim_stand_up);}
+        }
     }
 
     player.last_pos = player.pos;
@@ -225,10 +239,10 @@ fn update_safe() !void {
     player.render();
 
     w4.DRAW_COLORS.* = 0x0041;
-    var combo_text: [9:0]u8 = .{'C', 'O', 'M', 'B', 'O', ':', ' ', ' ', 0};
+    var combo_text: [9:0]u8 = .{ 'C', 'O', 'M', 'B', 'O', ':', ' ', ' ', 0 };
     combo_text[7] = '0' + @divTrunc(player_combat.combo, 10);
     combo_text[8] = '0' + @mod(player_combat.combo, 10);
-    w4.text(&combo_text, 0,0);
+    w4.text(&combo_text, 0, 0);
 
     if (debug) {
         for (hcols.items[0..hcols.len]) |col| {

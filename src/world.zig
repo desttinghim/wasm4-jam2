@@ -28,19 +28,26 @@ pub const player_bmp = draw.Bitmap{ .data = &assets.mc, .width = assets.mc_width
 pub const player_punch_bmp = draw.Bitmap{ .data = &assets.mc_punch, .width = assets.mc_punch_width, .height = assets.mc_punch_height };
 pub const player_anim_stand_down = [_]Anim.Ops{ .{ .Index = 0 }, .Stop };
 pub const player_anim_walk_down = [_]Anim.Ops{
-    .{ .Index = 1 }, .{ .Wait = 5 },
-    .{ .Index = 2 }, .{ .Wait = 5 },
-    .{ .Index = 3 }, .{ .Wait = 5 },
+    .{ .Index = 1 }, .{ .Wait = 8 },
+    .{ .Index = 2 }, .{ .Wait = 8 },
+    .{ .Index = 3 }, .{ .Wait = 8 },
     .FlipX,
 };
-pub const player_anim_stand_side = [_]Anim.Ops{ .{ .Index = 7 }, .Stop };
+pub const player_anim_stand_up = [_]Anim.Ops{ .{ .Index = 4 }, .Stop };
+pub const player_anim_walk_up = [_]Anim.Ops{
+    .{ .Index = 5 }, .{ .Wait = 8 },
+    .{ .Index = 6 }, .{ .Wait = 8 },
+    .{ .Index = 7 }, .{ .Wait = 8 },
+    .FlipX,
+};
+pub const player_anim_stand_side = [_]Anim.Ops{ .{ .Index = 8 }, .Stop };
 pub const player_anim_walk_side = [_]Anim.Ops{
-    .{ .Index = 8 }, .{ .Wait = 5 },
     .{ .Index = 9 }, .{ .Wait = 5 },
     .{ .Index = 10 }, .{ .Wait = 5 },
     .{ .Index = 11 }, .{ .Wait = 5 },
     .{ .Index = 12 }, .{ .Wait = 5 },
     .{ .Index = 13 }, .{ .Wait = 5 },
+    .{ .Index = 14 }, .{ .Wait = 5 },
 };
 pub const player_anim_punch_down = [_]Anim.Ops{
     .NoInterrupt,
@@ -68,22 +75,22 @@ pub const player_anim_punch_down2 = [_]Anim.Ops{
 };
 pub const player_anim_punch_side = [_]Anim.Ops{
     .NoInterrupt,
+    .{ .Index = 6 },
+    .{ .Wait = 5 },
     .{ .Index = 7 },
     .{ .Wait = 5 },
     .{ .Index = 8 },
-    .{ .Wait = 5 },
-    .{ .Index = 9 },
     .{ .Wait = 5 },
     .AllowInterrupt,
     .Stop,
 };
 pub const player_anim_punch_side2 = [_]Anim.Ops{
     .NoInterrupt,
+    .{ .Index = 9 },
+    .{ .Wait = 5 },
     .{ .Index = 10 },
     .{ .Wait = 5 },
     .{ .Index = 11 },
-    .{ .Wait = 5 },
-    .{ .Index = 12 },
     .{ .Wait = 5 },
     .AllowInterrupt,
     .Stop,
