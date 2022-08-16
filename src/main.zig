@@ -152,8 +152,9 @@ fn start_safe() !void {
         while (i < entity_count) : (i += 1) {
             const entity = try world.Entity.read(reader);
             if (entity.kind == .Player) {
-                // TODO
-                w4.tracef("PLAYER");
+                const tile_sizef = geom.vec2.itof(world.tile_size);
+                player.pos = entity.toPos() * tile_sizef;
+                player.last_pos = entity.toPos() * tile_sizef;
             }
         }
     }
@@ -188,22 +189,27 @@ fn update_safe() !void {
     defer frame_fba[(time + 1) % 2].reset();
 
     // Input
+    var moving = false;
     const speed = 80.0 / 60.0;
     if (input.btn(.one, .up)) {
         player.facing = .Up;
         player.pos[1] -= speed;
+        moving = true;
     }
     if (input.btn(.one, .left)) {
         player.facing = .Left;
         player.pos[0] -= speed;
+        moving = true;
     }
     if (input.btn(.one, .right)) {
         player.facing = .Right;
         player.pos[0] += speed;
+        moving = true;
     }
     if (input.btn(.one, .down)) {
         player.facing = .Down;
         player.pos[1] += speed;
+        moving = true;
     }
     if (input.btnp(.one, .z)) {
         player_combat.startAttack(time);
@@ -216,7 +222,7 @@ fn update_safe() !void {
     if (hcols.len > 0) player.pos[0] = player.last_pos[0];
     if (vcols.len > 0) player.pos[1] = player.last_pos[1];
 
-    if (player.isMoving()) {
+    if (moving or player.isMoving()) {
         if (player.facing == .Up) player.animator.play(&world.player_anim_walk_up);
         if (player.facing == .Down) player.animator.play(&world.player_anim_walk_down);
         if (player.facing == .Left) {
@@ -273,7 +279,7 @@ fn update_safe() !void {
 }
 
 pub fn isSolid(tile: u8) bool {
-    return (tile >= 1 and tile <= 6) or (tile >= 18 and tile <= 23 and tile != 19) or (tile >= 35 and tile <= 40);
+    return (tile >= 1 and tile <= 6) or (tile >= 18 and tile <= 23 and tile != 19) or (tile >= 35 and tile <= 40) or (tile >= 55 and tile <= 57) or (tile >= 72 and tile <= 74);
 }
 
 pub fn isInScreenBounds(x: i32, y: i32) bool {

@@ -42,7 +42,7 @@ pub const player_anim_walk_up = [_]Anim.Ops{
 };
 pub const player_anim_stand_side = [_]Anim.Ops{ .{ .Index = 8 }, .Stop };
 pub const player_anim_walk_side = [_]Anim.Ops{
-    .{ .Index = 9 }, .{ .Wait = 5 },
+    .{ .Index = 9 },  .{ .Wait = 5 },
     .{ .Index = 10 }, .{ .Wait = 5 },
     .{ .Index = 11 }, .{ .Wait = 5 },
     .{ .Index = 12 }, .{ .Wait = 5 },
@@ -137,7 +137,7 @@ pub const Entity = struct {
     }
 
     pub fn toPos(entity: Entity) geom.Vec2f {
-        return geom.vec2.itof(@as(geom.Vec2, entity.vec));
+        return geom.vec2.itof(.{ entity.vec[0], entity.vec[1] });
     }
 
     /// Convert vec directly to geom.Vec2 for doing math
