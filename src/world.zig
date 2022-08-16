@@ -19,3 +19,24 @@ pub fn blit(pos: geom.Vec2, tile: isize) void {
 }
 
 pub const grass = 0;
+
+
+pub const EntityKind = enum {
+    Player,
+};
+
+pub const Entity = struct {
+    /// Location measured in tiles
+    vec: [2]i16,
+    kind: EntityKind,
+
+    pub fn toPos(entity: Entity) geom.Vec2f {
+        return geom.vec2.itof(@as(geom.Vec2, entity.vec));
+    }
+};
+
+pub const Room = struct {
+    /// Location measured in rooms
+    coord: [2]i8,
+    offset: u16,
+};

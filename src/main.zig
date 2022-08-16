@@ -3,7 +3,7 @@ const draw = @import("draw.zig");
 const std = @import("std");
 const geom = @import("geom.zig");
 const input = @import("input.zig");
-const tiles = @import("tiles.zig");
+const tiles = @import("world.zig");
 
 const builtin = @import("builtin");
 const debug = builtin.mode == .Debug;
