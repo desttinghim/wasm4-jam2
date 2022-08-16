@@ -1,6 +1,7 @@
 const std = @import("std");
 const draw = @import("draw.zig");
 const geom = @import("geom.zig");
+const Anim = @import("Anim.zig");
 
 pub const assets = @import("assets");
 pub const bitmap = draw.Bitmap{
@@ -25,7 +26,21 @@ pub const grass = 0;
 pub const player_blit = draw.Blit.init_sub(0x4200, &player_bmp, .{ .bpp = .b2 }, .{ 0, 0, 16, 16 });
 pub const player_bmp = draw.Bitmap{ .data = player_frames, .width = assets.mc_width, .height = assets.mc_height };
 pub const player_frames = &assets.mc;
-pub const player_frame_stand = 0;
+pub const player_blit_stand = draw.Blit.init_sub(0x4200, &player_bmp, .{ .bpp = .b2 }, .{ 0, 0, 16, 16 });
+pub const player_blit_walk = [_]draw.Blit{
+    draw.Blit.init_sub(0x4200, &player_bmp, .{ .bpp = .b2 }, .{ 16, 0, 16, 16 }),
+    draw.Blit.init_sub(0x4200, &player_bmp, .{ .bpp = .b2 }, .{ 32, 0, 16, 16 }),
+    draw.Blit.init_sub(0x4200, &player_bmp, .{ .bpp = .b2 }, .{ 48, 0, 16, 16 }),
+    draw.Blit.init_sub(0x4200, &player_bmp, .{ .bpp = .b2, .flip_x = true }, .{ 16, 0, 16, 16 }),
+    draw.Blit.init_sub(0x4200, &player_bmp, .{ .bpp = .b2, .flip_x = true }, .{ 32, 0, 16, 16 }),
+    draw.Blit.init_sub(0x4200, &player_bmp, .{ .bpp = .b2, .flip_x = true }, .{ 48, 0, 16, 16 }),
+};
+pub const player_anim_walk = [_]Anim.Ops{
+    .{ .Index = 0 }, .{ .Wait = 10 },
+    .{ .Index = 1 }, .{ .Wait = 10 },
+    .{ .Index = 2 }, .{ .Wait = 10 },
+    .FlipX,
+};
 
 pub const EntityKind = enum {
     Player,

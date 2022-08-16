@@ -4,6 +4,7 @@ const std = @import("std");
 const geom = @import("geom.zig");
 const input = @import("input.zig");
 const world = @import("world.zig");
+const Anim = @import("Anim.zig");
 
 const world_data = @embedFile(@import("world_data").path);
 
@@ -27,6 +28,8 @@ const frame_alloc: [2]std.mem.Allocator = .{
 };
 
 const Actor = struct {
+    index: usize = 0,
+    animator: Anim,
     image: ?draw.Blit,
     offset: geom.Vec2f,
     size: geom.Vec2f,
@@ -49,6 +52,7 @@ const Actor = struct {
 };
 
 var player = Actor{
+    .animator = .{.anim = &world.player_anim_walk},
     .pos = geom.Vec2f{ 80, 80 },
     .last_pos = geom.Vec2f{ 80, 80 },
     .rect = geom.AABBf{ -3, -3, 6, 6 },
@@ -141,6 +145,10 @@ fn update_safe() !void {
     }
 
     // Render
+    {
+        player.animator.update(&player.index, &player.image.?.flags);
+        player.image.?.rect = world.player_blit_walk[player.index].rect;
+    }
     player.render();
 
     if (debug) {
