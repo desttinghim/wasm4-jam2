@@ -19,6 +19,7 @@
         devShells.default = pkgs.mkShell {
           buildInputs = [
             zig.packages.${system}.master.latest
+            pkgs.libresprite
             pkgs.butler
             pkgs.binaryen
             upkgs.ldtk
