@@ -27,6 +27,21 @@ const frame_alloc: [2]std.mem.Allocator = .{
     frame_fba[1].allocator(),
 };
 
+const Facing = enum {
+    Down,
+    Left,
+    Right,
+    Up,
+    pub fn getVector(this: @This()) geom.Vec2f {
+        return switch (this) {
+            .Up => .{ 0, -1 },
+            .Left => .{ -1, 0 },
+            .Right => .{ 1, 0 },
+            .Down => .{ 0, 1 },
+        };
+    }
+};
+
 const Actor = struct {
     animator: Anim,
     image: ?draw.Blit,
@@ -36,7 +51,7 @@ const Actor = struct {
     last_pos: geom.Vec2f,
     rect: geom.AABBf,
     shadow: geom.AABBf,
-    facing: enum { Down, Left, Right, Up } = .Left,
+    facing: Facing = .Left,
 
     pub fn render(this: *Actor) void {
         const pos = geom.vec2.ftoi(this.pos + this.offset);
@@ -68,21 +83,14 @@ const Combat = struct {
     punch_up: [2][]const Anim.Ops,
     punch_side: [2][]const Anim.Ops,
 
-    pub fn update(this: *Combat, now: usize) void {
-        if (player.isMoving() and this.is_attacking) {
-            this.combo = 0;
-            this.is_attacking = false;
-            this.actor.image = player_blit;
-            this.actor.offset = player_offset;
-            this.actor.image.?.flags.flip_x = this.actor.facing == .Left;
-        }
-        if (now - this.last_attacking > 45 and this.is_attacking) {
-            this.combo = 0;
-            this.is_attacking = false;
-            this.actor.image = player_blit;
-            this.actor.offset = player_offset;
-            this.actor.image.?.flags.flip_x = this.actor.facing == .Left;
-        }
+    pub fn endAttack(this: *Combat) void {
+        this.combo = 0;
+        this.is_attacking = false;
+        this.actor.image = player_blit;
+        this.actor.offset = player_offset;
+        this.actor.image.?.flags.flip_x = this.actor.facing == .Left;
+        // Arrest momentum
+        this.actor.last_pos = this.actor.pos;
     }
 
     pub fn startAttack(this: *Combat, now: usize) void {
@@ -190,31 +198,38 @@ fn update_safe() !void {
 
     // Input
     var moving = false;
-    const speed = 80.0 / 60.0;
-    if (input.btn(.one, .up)) {
-        player.facing = .Up;
-        player.pos[1] -= speed;
-        moving = true;
+    const speed: f32 = 60.0 / 60.0;
+    if (!player_combat.is_attacking) {
+        if (input.btn(.one, .up)) {
+            player.facing = .Up;
+            player.pos[1] -= speed;
+            moving = true;
+        }
+        if (input.btn(.one, .left)) {
+            player.facing = .Left;
+            player.pos[0] -= speed;
+            moving = true;
+        }
+        if (input.btn(.one, .right)) {
+            player.facing = .Right;
+            player.pos[0] += speed;
+            moving = true;
+        }
+        if (input.btn(.one, .down)) {
+            player.facing = .Down;
+            player.pos[1] += speed;
+            moving = true;
+        }
+        if (moving and player_combat.is_attacking) player_combat.endAttack();
+        if (input.btnp(.one, .z)) player_combat.startAttack(time);
+
+    } else if(!player_combat.actor.animator.interruptable) {
+        player.pos += player.facing.getVector() * @splat(2, speed * 1.25);
+
+    } else {
+        if (input.btnp(.one, .z)) player_combat.startAttack(time);
+        if (time - player_combat.last_attacking > 45) player_combat.endAttack();
     }
-    if (input.btn(.one, .left)) {
-        player.facing = .Left;
-        player.pos[0] -= speed;
-        moving = true;
-    }
-    if (input.btn(.one, .right)) {
-        player.facing = .Right;
-        player.pos[0] += speed;
-        moving = true;
-    }
-    if (input.btn(.one, .down)) {
-        player.facing = .Down;
-        player.pos[1] += speed;
-        moving = true;
-    }
-    if (input.btnp(.one, .z)) {
-        player_combat.startAttack(time);
-    }
-    player_combat.update(time);
 
     // Collision
     const hcols = collide(geom.Vec2f{ player.pos[0], player.last_pos[1] } + geom.aabb.posf(player.rect), geom.aabb.sizef(player.rect));
@@ -222,7 +237,7 @@ fn update_safe() !void {
     if (hcols.len > 0) player.pos[0] = player.last_pos[0];
     if (vcols.len > 0) player.pos[1] = player.last_pos[1];
 
-    if (moving or player.isMoving()) {
+    if (moving and player.animator.interruptable) {
         if (player.facing == .Up) player.animator.play(&world.player_anim_walk_up);
         if (player.facing == .Down) player.animator.play(&world.player_anim_walk_down);
         if (player.facing == .Left) {
@@ -235,13 +250,19 @@ fn update_safe() !void {
         }
     } else {
         if (!player_combat.is_attacking) {
-            if (player.facing == .Down) { player.animator.play(&world.player_anim_stand_down); }
-            else if (player.facing == .Left or player.facing == .Right) { player.animator.play(&world.player_anim_stand_side); }
-            else {player.animator.play(&world.player_anim_stand_up);}
+            if (player.facing == .Down) {
+                player.animator.play(&world.player_anim_stand_down);
+            } else if (player.facing == .Left or player.facing == .Right) {
+                player.animator.play(&world.player_anim_stand_side);
+            } else {
+                player.animator.play(&world.player_anim_stand_up);
+            }
         }
     }
 
+    const velocity = (player.pos - player.last_pos) * @splat(2, @as(f32, 0.5));
     player.last_pos = player.pos;
+    player.pos += velocity;
 
     // Render
     w4.DRAW_COLORS.* = 0x1234;
