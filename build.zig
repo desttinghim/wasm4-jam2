@@ -8,7 +8,7 @@ const pkgs = struct {
     };
     const assets = std.build.Pkg{
         .name = "assets",
-        .source = .{ .path = "assets/tiles.zig" },
+        .source = .{ .path = "assets/assets.zig" },
     };
 };
 

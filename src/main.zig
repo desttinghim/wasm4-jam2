@@ -34,15 +34,16 @@ const Actor = struct {
     pos: geom.Vec2f,
     last_pos: geom.Vec2f,
     rect: geom.AABBf,
+    shadow: geom.AABBf,
 
     pub fn render(this: Actor) void {
         const pos = geom.vec2.ftoi(this.pos + this.offset);
-        const size = geom.vec2.ftoi(this.size);
+        const shadowpos = geom.vec2.ftoi(this.pos + geom.aabb.posf(this.shadow));
+        const size = geom.vec2.ftoi(geom.aabb.sizef(this.shadow));
+        w4.DRAW_COLORS.* = 0x33;
+        w4.oval(shadowpos[0], shadowpos[1], size[0], size[1]);
         if (this.image) |image| {
             image.blit(pos);
-        } else {
-            w4.DRAW_COLORS.* = 4;
-            w4.oval(pos[0], pos[1], size[0], size[1]);
         }
     }
 };
@@ -51,8 +52,9 @@ var player = Actor{
     .pos = geom.Vec2f{ 80, 80 },
     .last_pos = geom.Vec2f{ 80, 80 },
     .rect = geom.AABBf{ -3, -3, 6, 6 },
-    .offset = geom.Vec2f{ -8, -8 },
-    .image = null,
+    .shadow = geom.AABBf{-6.5, 1, 12, 5},
+    .offset = geom.Vec2f{ -8, -12 },
+    .image = world.player_blit,
     .size = .{ 16, 16 },
 };
 

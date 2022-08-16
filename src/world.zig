@@ -22,6 +22,10 @@ pub fn blit(pos: geom.Vec2, tile: isize) void {
 
 pub const grass = 0;
 
+pub const player_blit = draw.Blit.init_sub(0x4200, &player_bmp, .{ .bpp = .b2 }, .{ 0, 0, 16, 16 });
+pub const player_bmp = draw.Bitmap{ .data = player_frames, .width = assets.mc_width, .height = assets.mc_height };
+pub const player_frames = &assets.mc;
+pub const player_frame_stand = 0;
 
 pub const EntityKind = enum {
     Player,
@@ -35,7 +39,7 @@ pub const Entity = struct {
     pub fn init(kind: EntityKind, x: i64, y: i64) Entity {
         return .{
             .kind = kind,
-            .vec = .{@intCast(i16, x), @intCast(i16, y)},
+            .vec = .{ @intCast(i16, x), @intCast(i16, y) },
         };
     }
 
@@ -45,17 +49,17 @@ pub const Entity = struct {
 
     /// Convert vec directly to geom.Vec2 for doing math
     pub fn toVec(entity: Entity) geom.Vec2 {
-        return .{entity.vec[0], entity.vec[1]};
+        return .{ entity.vec[0], entity.vec[1] };
     }
 
     pub fn addRoomPos(entity: Entity, room: Room) Entity {
         const vec = entity.toVec() + room.toVec() * room_size;
-        return .{.vec = .{@intCast(i16, vec[0]), @intCast(i16, vec[1])}, .kind = entity.kind };
+        return .{ .vec = .{ @intCast(i16, vec[0]), @intCast(i16, vec[1]) }, .kind = entity.kind };
     }
 
     pub fn subRoomPos(entity: Entity, room: Room) Entity {
         const vec = entity.toVec() - room.toVec() * room_size;
-        return .{.vec = .{@intCast(i16, vec[0]), @intCast(i16, vec[1])}, .kind = entity.kind };
+        return .{ .vec = .{ @intCast(i16, vec[0]), @intCast(i16, vec[1]) }, .kind = entity.kind };
     }
 
     pub fn write(entity: Entity, writer: anytype) !void {
@@ -81,7 +85,7 @@ pub const Room = struct {
     tiles: []u8,
 
     pub fn toVec(room: Room) geom.Vec2 {
-        return .{room.coord[0], room.coord[1]};
+        return .{ room.coord[0], room.coord[1] };
     }
 
     pub fn write(room: Room, writer: anytype) !void {
@@ -100,7 +104,7 @@ pub const Room = struct {
             tile.* = try reader.readByte();
         }
         return Room{
-            .coord = .{x, y},
+            .coord = .{ x, y },
             .tiles = tile_slice,
         };
     }
