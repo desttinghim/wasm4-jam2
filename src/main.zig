@@ -28,37 +28,38 @@ const frame_alloc: [2]std.mem.Allocator = .{
 };
 
 const Actor = struct {
-    index: usize = 0,
     animator: Anim,
     image: ?draw.Blit,
     offset: geom.Vec2f,
     size: geom.Vec2f,
 
-    pos: geom.Vec2f,
+
+pos: geom.Vec2f,
     last_pos: geom.Vec2f,
     rect: geom.AABBf,
     shadow: geom.AABBf,
 
-    pub fn render(this: Actor) void {
+    pub fn render(this: *Actor) void {
         const pos = geom.vec2.ftoi(this.pos + this.offset);
         const shadowpos = geom.vec2.ftoi(this.pos + geom.aabb.posf(this.shadow));
         const size = geom.vec2.ftoi(geom.aabb.sizef(this.shadow));
         w4.DRAW_COLORS.* = 0x33;
         w4.oval(shadowpos[0], shadowpos[1], size[0], size[1]);
-        if (this.image) |image| {
+        if (this.image) |*image| {
+            player.animator.update(&image.frame, &image.flags);
             image.blit(pos);
         }
     }
 };
 
 var player = Actor{
-    .animator = .{.anim = &world.player_anim_walk},
+    .animator = .{ .anim = &world.player_anim_walk },
     .pos = geom.Vec2f{ 80, 80 },
     .last_pos = geom.Vec2f{ 80, 80 },
     .rect = geom.AABBf{ -3, -3, 6, 6 },
-    .shadow = geom.AABBf{-6.5, 1, 12, 5},
+    .shadow = geom.AABBf{ -6.5, 1, 12, 5 },
     .offset = geom.Vec2f{ -8, -12 },
-    .image = world.player_blit,
+    .image = draw.Blit.init_frame(world.player_style, &world.player_bmp, .{ .bpp = .b2 }, .{ 16, 16 }, 0),
     .size = .{ 16, 16 },
 };
 
@@ -96,9 +97,9 @@ fn start_safe() !void {
         // var i: usize = 0;
         // while (i < entity_count) : (i += 1) {
         room = try world.Room.read(long_alloc, reader);
-            // if (entity.kind == .Player) {
-                // TODO
-            // }
+        // if (entity.kind == .Player) {
+        // TODO
+        // }
         // }
     }
 }
@@ -145,10 +146,6 @@ fn update_safe() !void {
     }
 
     // Render
-    {
-        player.animator.update(&player.index, &player.image.?.flags);
-        player.image.?.rect = world.player_blit_walk[player.index].rect;
-    }
     player.render();
 
     if (debug) {

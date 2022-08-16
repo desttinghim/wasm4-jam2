@@ -101,9 +101,10 @@ pub const color = struct {
 // Object to render bitmap
 pub const Blit = struct {
     bmp: *const Bitmap,
-    rect: union(enum) { full, aabb: geom.AABB } = .full,
+    rect: union(enum) { full, frame: geom.Vec2, aabb: geom.AABB } = .full,
     flags: BlitFlags = .{ .bpp = .b1 },
     style: u16,
+    frame: usize = 0,
 
     pub fn init(style: u16, bitmap: *const Bitmap, flags: BlitFlags) @This() {
         return @This(){
@@ -123,10 +124,21 @@ pub const Blit = struct {
         };
     }
 
+    pub fn init_frame(style: u16, bitmap: *const Bitmap, flags: BlitFlags, frameSize: geom.Vec2, frame: usize) @This() {
+        return @This(){
+            .bmp = bitmap,
+            .rect = .{ .frame = frameSize },
+            .flags = flags,
+            .style = style,
+            .frame = frame,
+        };
+    }
+
     pub fn get_size(this: @This()) geom.Vec2 {
         return switch (this.rect) {
             .full => geom.Vec2{ this.bmp.width, this.bmp.height },
             .aabb => |aabb| geom.aabb.size(aabb),
+            .frame => |size| size,
         };
     }
 
@@ -135,7 +147,29 @@ pub const Blit = struct {
         switch (this.rect) {
             .full => this.bmp.blit(pos, this.flags),
             .aabb => |aabb| this.bmp.blit_sub(pos, aabb, this.flags),
+            .frame => |size| {
+                const frame = @intCast(i32, this.frame);
+                const width_in_frames = @divTrunc(this.bmp.width, size[0]);
+                const x = @mod(frame, width_in_frames);
+                const y = @divTrunc(frame, width_in_frames);
+                const aabb = geom.aabb.initv(geom.Vec2{ x, y } * size, size);
+                this.bmp.blit_sub(pos, aabb, this.flags);
+            },
         }
+    }
+};
+
+pub const BlitFlags = packed struct {
+    bpp: enum(u1) {
+        b1,
+        b2,
+    } = .b1,
+    flip_x: bool = false,
+    flip_y: bool = false,
+    rotate: bool = false,
+    _: u28 = 0,
+    comptime {
+        if (@sizeOf(@This()) != @sizeOf(u32)) unreachable;
     }
 };
 
@@ -143,6 +177,14 @@ pub const Bitmap = struct {
     data: [*]const u8,
     width: i32,
     height: i32,
+
+    pub fn fromPng2Src(data: []const u8, width: i32, height: i32) @This() {
+        return .{
+            .data = data,
+            .width = width,
+            .height = height,
+        };
+    }
 
     pub fn blit(this: @This(), pos: geom.Vec2, flags: BlitFlags) void {
         w4.blit(this.data, pos[geom.vec2.x], pos[geom.vec2.y], this.width, this.height, @bitCast(u32, flags));
@@ -160,20 +202,6 @@ pub const Bitmap = struct {
             this.width,
             @bitCast(u32, flags),
         );
-    }
-};
-
-pub const BlitFlags = packed struct {
-    bpp: enum(u1) {
-        b1,
-        b2,
-    } = .b1,
-    flip_x: bool = false,
-    flip_y: bool = false,
-    rotate: bool = false,
-    _: u28 = 0,
-    comptime {
-        if (@sizeOf(@This()) != @sizeOf(u32)) unreachable;
     }
 };
 

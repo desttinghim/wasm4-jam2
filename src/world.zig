@@ -23,22 +23,13 @@ pub fn blit(pos: geom.Vec2, tile: isize) void {
 
 pub const grass = 0;
 
-pub const player_blit = draw.Blit.init_sub(0x4200, &player_bmp, .{ .bpp = .b2 }, .{ 0, 0, 16, 16 });
-pub const player_bmp = draw.Bitmap{ .data = player_frames, .width = assets.mc_width, .height = assets.mc_height };
-pub const player_frames = &assets.mc;
-pub const player_blit_stand = draw.Blit.init_sub(0x4200, &player_bmp, .{ .bpp = .b2 }, .{ 0, 0, 16, 16 });
-pub const player_blit_walk = [_]draw.Blit{
-    draw.Blit.init_sub(0x4200, &player_bmp, .{ .bpp = .b2 }, .{ 16, 0, 16, 16 }),
-    draw.Blit.init_sub(0x4200, &player_bmp, .{ .bpp = .b2 }, .{ 32, 0, 16, 16 }),
-    draw.Blit.init_sub(0x4200, &player_bmp, .{ .bpp = .b2 }, .{ 48, 0, 16, 16 }),
-    draw.Blit.init_sub(0x4200, &player_bmp, .{ .bpp = .b2, .flip_x = true }, .{ 16, 0, 16, 16 }),
-    draw.Blit.init_sub(0x4200, &player_bmp, .{ .bpp = .b2, .flip_x = true }, .{ 32, 0, 16, 16 }),
-    draw.Blit.init_sub(0x4200, &player_bmp, .{ .bpp = .b2, .flip_x = true }, .{ 48, 0, 16, 16 }),
-};
+pub const player_style = 0x4200;
+pub const player_bmp = draw.Bitmap{ .data = &assets.mc, .width = assets.mc_width, .height = assets.mc_height };
+pub const player_anim_stand = [_]Anim.Ops{ .{ .Index = 0 }, .Stop };
 pub const player_anim_walk = [_]Anim.Ops{
-    .{ .Index = 0 }, .{ .Wait = 10 },
     .{ .Index = 1 }, .{ .Wait = 10 },
     .{ .Index = 2 }, .{ .Wait = 10 },
+    .{ .Index = 3 }, .{ .Wait = 10 },
     .FlipX,
 };
 
