@@ -37,12 +37,13 @@ const Actor = struct {
     last_pos: geom.Vec2f,
     rect: geom.AABBf,
     shadow: geom.AABBf,
+    facing: enum {Down, Left, Right, Up} = .Left,
 
     pub fn render(this: *Actor) void {
         const pos = geom.vec2.ftoi(this.pos + this.offset);
         const shadowpos = geom.vec2.ftoi(this.pos + geom.aabb.posf(this.shadow));
         const size = geom.vec2.ftoi(geom.aabb.sizef(this.shadow));
-        w4.DRAW_COLORS.* = 0x33;
+        w4.DRAW_COLORS.* = 0x44;
         w4.oval(shadowpos[0], shadowpos[1], size[0], size[1]);
         if (this.image) |*image| {
             player.animator.update(&image.frame, &image.flags);
@@ -62,8 +63,8 @@ const Combat = struct {
     last_attack: usize = 0,
     combo: u8 = 0,
 
-    anim_punch: []const Anim.Ops,
-    anim_punch2: []const Anim.Ops,
+    punch_down: [2][]const Anim.Ops,
+    punch_side: [2][]const Anim.Ops,
 
     pub fn update(this: *Combat, now: usize) void {
         if (now - this.last_attacking > 45) {
@@ -77,12 +78,12 @@ const Combat = struct {
             return;
         }
         if (now - this.last_attacking <= 20) {
-            this.combo += 1;
+            this.combo +|= 1;
         }
-        if (this.last_attack == 0) {
-            this.actor.animator.play(this.anim_punch2);
+        if (this.actor.facing == .Down) {
+            this.actor.animator.play(this.punch_down[this.last_attack]);
         } else {
-            this.actor.animator.play(this.anim_punch);
+            this.actor.animator.play(this.punch_side[this.last_attack]);
         }
         this.is_attacking = true;
         this.last_attacking = now;
@@ -91,7 +92,7 @@ const Combat = struct {
 };
 
 var player = Actor{
-    .animator = .{ .anim = &world.player_anim_walk },
+    .animator = .{ .anim = &world.player_anim_walk_down },
     .pos = geom.Vec2f{ 80, 80 },
     .last_pos = geom.Vec2f{ 80, 80 },
     .rect = geom.AABBf{ -3, -3, 6, 6 },
@@ -102,8 +103,8 @@ var player = Actor{
 };
 var player_combat = Combat{
     .actor = &player,
-    .anim_punch = &world.player_anim_punch,
-    .anim_punch2 = &world.player_anim_punch2,
+    .punch_down = .{&world.player_anim_punch_down, &world.player_anim_punch_down2},
+    .punch_side = .{&world.player_anim_punch_side, &world.player_anim_punch_side2},
 };
 
 var room: world.Room = undefined;
@@ -166,11 +167,25 @@ fn update_safe() !void {
 
     // Input
     const speed = 80.0 / 60.0;
-    if (input.btn(.one, .up)) player.pos[1] -= speed;
-    if (input.btn(.one, .left)) player.pos[0] -= speed;
-    if (input.btn(.one, .right)) player.pos[0] += speed;
-    if (input.btn(.one, .down)) player.pos[1] += speed;
-    if (input.btnp(.one, .z)) player_combat.startAttack(time);
+    if (input.btn(.one, .up)) {
+        player.facing = .Up;
+        player.pos[1] -= speed;
+    }
+    if (input.btn(.one, .left)) {
+        player.facing = .Left;
+        player.pos[0] -= speed;
+    }
+    if (input.btn(.one, .right)) {
+        player.facing = .Right;
+        player.pos[0] += speed;
+    }
+    if (input.btn(.one, .down)) {
+        player.facing = .Down;
+        player.pos[1] += speed;
+    }
+    if (input.btnp(.one, .z)){
+        player_combat.startAttack(time);
+    }
     player_combat.update(time);
 
     // Collision
@@ -180,9 +195,18 @@ fn update_safe() !void {
     if (vcols.len > 0) player.pos[1] = player.last_pos[1];
 
     if (player.isMoving()) {
-        player.animator.play(&world.player_anim_walk);
+        if (player.facing == .Down) player.animator.play(&world.player_anim_walk_down);
+        if (player.facing == .Left) {
+            player.image.?.flags.flip_x = true;
+            player.animator.play(&world.player_anim_walk_side);
+        }
+        if (player.facing == .Right) {
+            player.image.?.flags.flip_x = false;
+            player.animator.play(&world.player_anim_walk_side);
+        }
     } else {
-        player.animator.play(&world.player_anim_stand);
+        if (player.facing == .Down) player.animator.play(&world.player_anim_stand_down);
+        if (player.facing == .Left or player.facing == .Right) player.animator.play(&world.player_anim_stand_side);
     }
 
     player.last_pos = player.pos;
