@@ -1,4 +1,5 @@
 const std = @import("std");
+const LDtkImport = @import("tools/LDtkImport.zig");
 
 const pkgs = struct {
     const zmath = std.build.Pkg{
@@ -12,10 +13,21 @@ const pkgs = struct {
 };
 
 pub fn build(b: *std.build.Builder) !void {
+    // Build assets
+    const ldtk = LDtkImport.create(b, .{
+        .source_path = .{ .path = "assets/map.ldtk" },
+        .output_name = "mapldtk",
+    });
+    const data_step = b.addOptions();
+    data_step.addOptionFileSource("path", .{.generated = &ldtk.world_data });
+
+    // Build cart
     const mode = b.standardReleaseOptions();
     const lib = b.addSharedLibrary("cart", "src/main.zig", .unversioned);
 
-    // lib.addPackage(pkgs.zmath);
+    // Add dependencies
+    lib.step.dependOn(&data_step.step);
+    lib.addPackage(data_step.getPackage("world_data"));
     lib.addPackage(pkgs.assets);
 
     lib.setBuildMode(mode);

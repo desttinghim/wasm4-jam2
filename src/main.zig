@@ -3,7 +3,9 @@ const draw = @import("draw.zig");
 const std = @import("std");
 const geom = @import("geom.zig");
 const input = @import("input.zig");
-const tiles = @import("world.zig");
+const world = @import("world.zig");
+
+const world_data = @embedFile(@import("world_data").path);
 
 const builtin = @import("builtin");
 const debug = builtin.mode == .Debug;
@@ -54,9 +56,44 @@ var player = Actor{
     .size = .{ 16, 16 },
 };
 
+var room: world.Room = undefined;
+
 export fn start() void {
     if (debug) {
-        w4.tracef("tilemap_size = (%d, %d)", tiles.tilemap_size[0], tiles.tilemap_size[1]);
+        w4.tracef("tilemap_size = (%d, %d)", world.tilemap_size[0], world.tilemap_size[1]);
+    }
+    start_safe() catch |e| w4.tracef(@errorName(e));
+}
+
+fn start_safe() !void {
+    const Cursor = std.io.FixedBufferStream([]const u8);
+    var cursor = Cursor{
+        .pos = 0,
+        .buffer = world_data,
+    };
+    w4.tracef("%d", world_data.len);
+    var reader = cursor.reader();
+    {
+        const entity_count = try reader.readInt(u8, .Little);
+        var i: usize = 0;
+        while (i < entity_count) : (i += 1) {
+            const entity = try world.Entity.read(reader);
+            if (entity.kind == .Player) {
+                // TODO
+                w4.tracef("PLAYER");
+            }
+        }
+    }
+    {
+        const room_count = try reader.readInt(u8, .Little);
+        w4.tracef("%d", room_count);
+        // var i: usize = 0;
+        // while (i < entity_count) : (i += 1) {
+        room = try world.Room.read(long_alloc, reader);
+            // if (entity.kind == .Player) {
+                // TODO
+            // }
+        // }
     }
 }
 
@@ -96,7 +133,8 @@ fn update_safe() !void {
     while (x < 10) : (x += 1) {
         var y: isize = 0;
         while (y < 10) : (y += 1) {
-            tiles.blit(geom.Vec2{ x, y } * tiles.tile_size, level[@intCast(usize, y)][@intCast(usize, x)]);
+            const idx = @intCast(usize, y * 10 + x);
+            world.blit(geom.Vec2{ x, y } * world.tile_size, room.tiles[idx]);
         }
     }
 
@@ -119,21 +157,8 @@ fn update_safe() !void {
     }
 }
 
-const level = [_][10]u8{
-    .{ 0, 1, 2, 3, 0, 0, 0, 0, 0, 0 },
-    .{ 0, 18, 19, 20, 0, 0, 0, 0, 0, 0 },
-    .{ 0, 35, 36, 37, 0, 0, 0, 0, 0, 0 },
-    .{ 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 },
-    .{ 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 },
-    .{ 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 },
-    .{ 0, 0, 0, 0, 0, 1, 2, 3, 0, 0 },
-    .{ 0, 0, 0, 0, 0, 18, 19, 20, 0, 0 },
-    .{ 0, 0, 0, 0, 0, 35, 36, 37, 0, 0 },
-    .{ 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 },
-};
-
 pub fn isSolid(tile: u8) bool {
-    return tile > 0;
+    return (tile >= 1 and tile <= 6) or (tile >= 18 and tile <= 23 and tile != 19) or (tile >= 35 and tile <= 40);
 }
 
 pub fn isInScreenBounds(x: i32, y: i32) bool {
@@ -145,7 +170,7 @@ pub fn isInMapBounds(x: i32, y: i32) bool {
 }
 
 pub fn collide(pos: geom.Vec2f, size: geom.Vec2f) CollisionInfo {
-    const tile_sizef = geom.vec2.itof(tiles.tile_size);
+    const tile_sizef = geom.vec2.itof(world.tile_size);
     const top_left = pos / tile_sizef;
     const bot_right = top_left + size / tile_sizef;
     var collisions = CollisionInfo.init();
@@ -157,8 +182,9 @@ pub fn collide(pos: geom.Vec2f, size: geom.Vec2f) CollisionInfo {
             if (!isInMapBounds(i, a)) continue;
             const x = @intCast(usize, i);
             const y = @intCast(usize, a);
-            const tile = level[y][x];
-            const tilepos = geom.vec2.itof(geom.Vec2{ i, a } * tiles.tile_size);
+            const idx = y * 10 + x;
+            const tile = room.tiles[idx];
+            const tilepos = geom.vec2.itof(geom.Vec2{ i, a } * world.tile_size);
 
             if (isSolid(tile)) {
                 collisions.append(geom.aabb.initvf(tilepos, tile_sizef));
