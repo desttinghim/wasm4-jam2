@@ -56,9 +56,9 @@ pub const player_anim_punch_down = [_]Anim.Ops{
     .{ .Wait = 5 },
     .{ .Index = 1 },
     .{ .Wait = 5 },
+    .AllowInterrupt,
     .{ .Index = 2 },
     .{ .Wait = 5 },
-    .AllowInterrupt,
     .Stop,
 };
 pub const player_anim_punch_down2 = [_]Anim.Ops{
@@ -68,9 +68,33 @@ pub const player_anim_punch_down2 = [_]Anim.Ops{
     .{ .Wait = 5 },
     .{ .Index = 1 },
     .{ .Wait = 5 },
+    .AllowInterrupt,
     .{ .Index = 2 },
     .{ .Wait = 5 },
+    .Stop,
+};
+pub const player_anim_punch_up = [_]Anim.Ops{
+    .NoInterrupt,
+    .{ .SetFlipX = false },
+    .{ .Index = 3 },
+    .{ .Wait = 5 },
+    .{ .Index = 4 },
+    .{ .Wait = 5 },
     .AllowInterrupt,
+    .{ .Index = 5 },
+    .{ .Wait = 5 },
+    .Stop,
+};
+pub const player_anim_punch_up2 = [_]Anim.Ops{
+    .NoInterrupt,
+    .{ .SetFlipX = true },
+    .{ .Index = 3 },
+    .{ .Wait = 5 },
+    .{ .Index = 4 },
+    .{ .Wait = 5 },
+    .AllowInterrupt,
+    .{ .Index = 5 },
+    .{ .Wait = 5 },
     .Stop,
 };
 pub const player_anim_punch_side = [_]Anim.Ops{
@@ -79,9 +103,9 @@ pub const player_anim_punch_side = [_]Anim.Ops{
     .{ .Wait = 5 },
     .{ .Index = 7 },
     .{ .Wait = 5 },
+    .AllowInterrupt,
     .{ .Index = 8 },
     .{ .Wait = 5 },
-    .AllowInterrupt,
     .Stop,
 };
 pub const player_anim_punch_side2 = [_]Anim.Ops{
@@ -90,9 +114,9 @@ pub const player_anim_punch_side2 = [_]Anim.Ops{
     .{ .Wait = 5 },
     .{ .Index = 10 },
     .{ .Wait = 5 },
+    .AllowInterrupt,
     .{ .Index = 11 },
     .{ .Wait = 5 },
-    .AllowInterrupt,
     .Stop,
 };
 

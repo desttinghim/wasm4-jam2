@@ -65,14 +65,23 @@ const Combat = struct {
     image: draw.Blit,
     offset: geom.Vec2f,
     punch_down: [2][]const Anim.Ops,
+    punch_up: [2][]const Anim.Ops,
     punch_side: [2][]const Anim.Ops,
 
     pub fn update(this: *Combat, now: usize) void {
+        if (player.isMoving() and this.is_attacking) {
+            this.combo = 0;
+            this.is_attacking = false;
+            this.actor.image = player_blit;
+            this.actor.offset = player_offset;
+            this.actor.image.?.flags.flip_x = this.actor.facing == .Left;
+        }
         if (now - this.last_attacking > 45 and this.is_attacking) {
             this.combo = 0;
             this.is_attacking = false;
             this.actor.image = player_blit;
             this.actor.offset = player_offset;
+            this.actor.image.?.flags.flip_x = this.actor.facing == .Left;
         }
     }
 
@@ -88,6 +97,8 @@ const Combat = struct {
         this.actor.offset = this.offset;
         if (this.actor.facing == .Down) {
             this.actor.animator.play(this.punch_down[this.last_attack]);
+        } else if (this.actor.facing == .Up) {
+            this.actor.animator.play(this.punch_up[this.last_attack]);
         } else {
             this.actor.animator.play(this.punch_side[this.last_attack]);
             this.actor.image.?.flags.flip_x = this.actor.facing == .Left;
@@ -114,6 +125,7 @@ var player_combat = Combat{
     .offset = geom.Vec2f{ -16, -20 },
     .image = draw.Blit.init_frame(world.player_style, &world.player_punch_bmp, .{ .bpp = .b2 }, .{ 32, 32 }, 0),
     .punch_down = .{ &world.player_anim_punch_down, &world.player_anim_punch_down2 },
+    .punch_up = .{ &world.player_anim_punch_up, &world.player_anim_punch_up2 },
     .punch_side = .{ &world.player_anim_punch_side, &world.player_anim_punch_side2 },
 };
 
