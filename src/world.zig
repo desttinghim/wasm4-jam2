@@ -27,10 +27,34 @@ pub const player_style = 0x4200;
 pub const player_bmp = draw.Bitmap{ .data = &assets.mc, .width = assets.mc_width, .height = assets.mc_height };
 pub const player_anim_stand = [_]Anim.Ops{ .{ .Index = 0 }, .Stop };
 pub const player_anim_walk = [_]Anim.Ops{
-    .{ .Index = 1 }, .{ .Wait = 10 },
-    .{ .Index = 2 }, .{ .Wait = 10 },
-    .{ .Index = 3 }, .{ .Wait = 10 },
+    .{ .Index = 1 }, .{ .Wait = 5 },
+    .{ .Index = 2 }, .{ .Wait = 5 },
+    .{ .Index = 3 }, .{ .Wait = 5 },
     .FlipX,
+};
+pub const player_anim_punch = [_]Anim.Ops{
+    .NoInterrupt,
+    .{ .SetFlipX = false },
+    .{ .Index = 4 },
+    .{ .Wait = 5 },
+    .{ .Index = 5 },
+    .{ .Wait = 5 },
+    .{ .Index = 6 },
+    .{ .Wait = 5 },
+    .AllowInterrupt,
+    .Stop,
+};
+pub const player_anim_punch2 = [_]Anim.Ops{
+    .NoInterrupt,
+    .{ .SetFlipX = true },
+    .{ .Index = 4 },
+    .{ .Wait = 5 },
+    .{ .Index = 5 },
+    .{ .Wait = 5 },
+    .{ .Index = 6 },
+    .{ .Wait = 5 },
+    .AllowInterrupt,
+    .Stop,
 };
 
 pub const EntityKind = enum {

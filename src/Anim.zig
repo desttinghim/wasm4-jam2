@@ -6,11 +6,14 @@ delayUntil: usize = 0,
 anim: []const Ops,
 stopped: bool = false,
 flipped: bool = false,
+interruptable: bool = true,
 
-pub const Ops = union(enum) { Index: usize, Wait: usize, FlipX, Stop };
+pub const Ops = union(enum) { Index: usize, Wait: usize, FlipX, SetFlipX: bool, Stop, NoInterrupt, AllowInterrupt };
 
 pub fn play(this: *@This(), anim: []const Ops) void {
     if (this.anim.ptr == anim.ptr) return;
+    if (!this.interruptable) return;
+    if (anim[0] == .NoInterrupt) this.interruptable = false;
     this.anim = anim;
     this.stopped = false;
     this.currentOp = 0;
@@ -23,7 +26,10 @@ pub fn update(this: *@This(), out: *usize, flags_out: *BlitFlags) void {
             .Index => |index| out.* = index,
             .Wait => |wait| this.delayUntil = this.time + wait,
             .FlipX => flags_out.flip_x = !flags_out.flip_x,
+            .SetFlipX => |flip| flags_out.flip_x = flip,
             .Stop => this.stopped = true,
+            .NoInterrupt => this.interruptable = false,
+            .AllowInterrupt => this.interruptable = true,
         }
         this.currentOp = (this.currentOp + 1) % this.anim.len;
     }

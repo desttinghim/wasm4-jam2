@@ -33,8 +33,7 @@ const Actor = struct {
     offset: geom.Vec2f,
     size: geom.Vec2f,
 
-
-pos: geom.Vec2f,
+    pos: geom.Vec2f,
     last_pos: geom.Vec2f,
     rect: geom.AABBf,
     shadow: geom.AABBf,
@@ -50,6 +49,45 @@ pos: geom.Vec2f,
             image.blit(pos);
         }
     }
+
+    pub fn isMoving(this: Actor) bool {
+        return (@reduce(.Or, this.pos != this.last_pos));
+    }
+};
+
+const Combat = struct {
+    actor: *Actor,
+    is_attacking: bool = false,
+    last_attacking: usize = 0,
+    last_attack: usize = 0,
+    combo: u8 = 0,
+
+    anim_punch: []const Anim.Ops,
+    anim_punch2: []const Anim.Ops,
+
+    pub fn update(this: *Combat, now: usize) void {
+        if (now - this.last_attacking > 45) {
+            this.combo = 0;
+        }
+    }
+
+    pub fn startAttack(this: *Combat, now: usize) void {
+        if (!this.actor.animator.interruptable) {
+            this.combo = 0;
+            return;
+        }
+        if (now - this.last_attacking <= 20) {
+            this.combo += 1;
+        }
+        if (this.last_attack == 0) {
+            this.actor.animator.play(this.anim_punch2);
+        } else {
+            this.actor.animator.play(this.anim_punch);
+        }
+        this.is_attacking = true;
+        this.last_attacking = now;
+        this.last_attack = (this.last_attack + 1) % 2;
+    }
 };
 
 var player = Actor{
@@ -61,6 +99,11 @@ var player = Actor{
     .offset = geom.Vec2f{ -8, -12 },
     .image = draw.Blit.init_frame(world.player_style, &world.player_bmp, .{ .bpp = .b2 }, .{ 16, 16 }, 0),
     .size = .{ 16, 16 },
+};
+var player_combat = Combat{
+    .actor = &player,
+    .anim_punch = &world.player_anim_punch,
+    .anim_punch2 = &world.player_anim_punch2,
 };
 
 var room: world.Room = undefined;
@@ -127,14 +170,24 @@ fn update_safe() !void {
     if (input.btn(.one, .left)) player.pos[0] -= speed;
     if (input.btn(.one, .right)) player.pos[0] += speed;
     if (input.btn(.one, .down)) player.pos[1] += speed;
+    if (input.btnp(.one, .z)) player_combat.startAttack(time);
+    player_combat.update(time);
 
     // Collision
     const hcols = collide(geom.Vec2f{ player.pos[0], player.last_pos[1] } + geom.aabb.posf(player.rect), geom.aabb.sizef(player.rect));
     const vcols = collide(geom.Vec2f{ player.last_pos[0], player.pos[1] } + geom.aabb.posf(player.rect), geom.aabb.sizef(player.rect));
     if (hcols.len > 0) player.pos[0] = player.last_pos[0];
     if (vcols.len > 0) player.pos[1] = player.last_pos[1];
+
+    if (player.isMoving()) {
+        player.animator.play(&world.player_anim_walk);
+    } else {
+        player.animator.play(&world.player_anim_stand);
+    }
+
     player.last_pos = player.pos;
 
+    // Render
     w4.DRAW_COLORS.* = 0x1234;
     var x: isize = 0;
     while (x < 10) : (x += 1) {
@@ -145,8 +198,13 @@ fn update_safe() !void {
         }
     }
 
-    // Render
     player.render();
+
+    w4.DRAW_COLORS.* = 0x0041;
+    var combo_text: [9:0]u8 = .{'C', 'O', 'M', 'B', 'O', ':', ' ', ' ', 0};
+    combo_text[7] = '0' + @divTrunc(player_combat.combo, 10);
+    combo_text[8] = '0' + @mod(player_combat.combo, 10);
+    w4.text(&combo_text, 0,0);
 
     if (debug) {
         for (hcols.items[0..hcols.len]) |col| {
