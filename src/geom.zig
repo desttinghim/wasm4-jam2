@@ -396,7 +396,7 @@ pub const AABBf = @Vector(4, f32);
 pub const aabb = struct {
     /// Converts the AABB into a Rect
     pub fn as_rect(box: AABB) Rect {
-        return Rect{ box[0], box[1], box[0] + box[2], box[0] + box[3] };
+        return Rect{ box[0], box[1], box[0] + box[2], box[1] + box[3] };
     }
 
     pub fn pos(box: AABB) Vec2 {
@@ -437,7 +437,7 @@ pub const aabb = struct {
 
     /// Converts the AABBf into a Rectf
     pub fn as_rectf(box: AABBf) Rectf {
-        return Rectf{ box[0], box[1], box[0] + box[2], box[0] + box[3] };
+        return Rectf{ box[0], box[1], box[0] + box[2], box[1] + box[3] };
     }
 
     pub fn posf(box: AABBf) Vec2f {

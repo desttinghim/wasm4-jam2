@@ -91,7 +91,7 @@ var player_combat = Combat{
 };
 
 var actors: []Actor = undefined;
-const AnimStore = struct { owns: usize, anim: Anim } ;
+const AnimStore = struct { owns: usize, anim: Anim };
 var animators: []AnimStore = undefined;
 
 var room: world.Room = undefined;
@@ -126,7 +126,7 @@ fn start_safe() !void {
                     .kind = entity.kind,
                     .pos = pos,
                     .last_pos = pos,
-                    .collisionBox = geom.AABBf{ -3, -3, 6, 6 },
+                    .collisionBox = geom.AABBf{ -4, -4, 8, 8 },
                     .offset = geom.Vec2f{ -8, -12 },
                     .image = player_blit,
                 };
@@ -137,7 +137,7 @@ fn start_safe() !void {
                     .kind = entity.kind,
                     .pos = pos,
                     .last_pos = pos,
-                    .collisionBox = geom.AABBf{ -3, -3, 6, 6 },
+                    .collisionBox = geom.AABBf{ -4, -4, 8, 8 },
                     .offset = geom.Vec2f{ -8, -12 },
                     .image = draw.Blit.init_frame(0x0234, &world.bitmap, .{ .bpp = .b2 }, .{ 16, 16 }, world.pot),
                 };
@@ -218,9 +218,9 @@ fn update_safe() !void {
 
         // Collision
         const as_rectf = geom.aabb.as_rectf;
-        const shiftf = geom.rect.shiftf;
-        const hcols = collide(playerIndex, shiftf(as_rectf(player.collisionBox), geom.Vec2f{player.pos[0], player.last_pos[1]}));
-        const vcols = collide(playerIndex, shiftf(as_rectf(player.collisionBox), geom.Vec2f{player.last_pos[0], player.pos[1]}));
+        const addvf = geom.aabb.addvf;
+        const hcols = collide(playerIndex, as_rectf(addvf(player.collisionBox, geom.Vec2f{ player.pos[0], player.last_pos[1] })));
+        const vcols = collide(playerIndex, as_rectf(addvf(player.collisionBox, geom.Vec2f{ player.last_pos[0], player.pos[1] })));
         if (hcols.len > 0) player.pos[0] = player.last_pos[0];
         if (vcols.len > 0) player.pos[1] = player.last_pos[1];
 
@@ -274,7 +274,7 @@ fn update_safe() !void {
         actor.render();
         const aabb = geom.aabb.addvf(actor.collisionBox, actor.pos);
         w4.DRAW_COLORS.* = 0x4444;
-        w4.rect(@floatToInt(i32, aabb[0]),@floatToInt(i32, aabb[1]), @floatToInt(usize, aabb[2]), @floatToInt(usize, aabb[3]));
+        w4.rect(@floatToInt(i32, aabb[0]), @floatToInt(i32, aabb[1]), @floatToInt(usize, aabb[2]), @floatToInt(usize, aabb[3]));
     }
 
     w4.DRAW_COLORS.* = 0x0041;
@@ -305,7 +305,7 @@ pub fn collide(which: usize, rect: geom.Rectf) CollisionInfo {
         var o_rect = geom.aabb.as_rectf(geom.aabb.addvf(actor.collisionBox, actor.pos));
         if (geom.rect.overlapsf(rect, o_rect)) {
             collisions.append(actor.collisionBox);
-            w4.tracef("collision!");
+            w4.tracef("collision! %d", i);
         }
     }
 
