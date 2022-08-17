@@ -317,7 +317,7 @@ fn update_safe() !void {
         while (y < room.size[1]) : (y += 1) {
             // if (!(y >= camera_pos_g[1]  and y < camera_pos_g[1]  + 11)) continue;
             const idx = @intCast(usize, y * @intCast(i16, room.size[0]) + x);
-            world.blit(geom.Vec2{ x, y } * world.tile_size - camera_pos, room.tiles[idx]);
+            world.blit((geom.Vec2{ x, y } + room.toVec2()) * world.tile_size - camera_pos, room.tiles[idx]);
         }
     }
 
@@ -390,7 +390,7 @@ pub fn collide(which: usize, rect: geom.Rectf) CollisionInfo {
         }
     }
 
-    const roomvec = geom.vec2.itof(room.toVec());
+    const roomvec = geom.vec2.itof(room.toVec2());
     const top_left_i = geom.rect.top_leftf(rect) / tile_sizef;
     const bot_right_i = top_left_i + geom.rect.sizef(rect) / tile_sizef;
     const top_left = top_left_i - roomvec;
