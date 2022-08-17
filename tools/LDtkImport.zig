@@ -130,6 +130,8 @@ fn parseLevel(opt: struct {
                 var kind_opt: ?world.EntityKind = null;
                 if (std.mem.eql(u8, entity.__identifier, "Player")) {
                     kind_opt = .Player;
+                } else if (std.mem.eql(u8, entity.__identifier, "Pot")) {
+                    kind_opt = .Pot;
                 }
 
                 if (kind_opt) |kind| {

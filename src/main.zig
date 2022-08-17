@@ -27,55 +27,15 @@ const frame_alloc: [2]std.mem.Allocator = .{
     frame_fba[1].allocator(),
 };
 
-const Facing = enum {
-    Down,
-    Left,
-    Right,
-    Up,
-    pub fn getVector(this: @This()) geom.Vec2f {
-        return switch (this) {
-            .Up => .{ 0, -1 },
-            .Left => .{ -1, 0 },
-            .Right => .{ 1, 0 },
-            .Down => .{ 0, 1 },
-        };
-    }
-};
-
-const Actor = struct {
-    animator: Anim,
-    image: ?draw.Blit,
-    offset: geom.Vec2f,
-
-    pos: geom.Vec2f,
-    last_pos: geom.Vec2f,
-    rect: geom.AABBf,
-    shadow: geom.AABBf,
-    facing: Facing = .Left,
-
-    pub fn render(this: *Actor) void {
-        const pos = geom.vec2.ftoi(this.pos + this.offset);
-        const shadowpos = geom.vec2.ftoi(this.pos + geom.aabb.posf(this.shadow));
-        const size = geom.vec2.ftoi(geom.aabb.sizef(this.shadow));
-        w4.DRAW_COLORS.* = 0x44;
-        w4.oval(shadowpos[0], shadowpos[1], size[0], size[1]);
-        if (this.image) |*image| {
-            player.animator.update(&image.frame, &image.flags);
-            image.blit(pos);
-        }
-    }
-
-    pub fn isMoving(this: Actor) bool {
-        return (@reduce(.Or, this.pos != this.last_pos));
-    }
-};
+const Actor = @import("Actor.zig");
 
 const Combat = struct {
+    animator: *Anim,
     actor: *Actor,
     is_attacking: bool = false,
     last_attacking: usize = 0,
     last_attack: usize = 0,
-    combo: u8 = 0,
+    chain: u8 = 0,
 
     image: draw.Blit,
     offset: geom.Vec2f,
@@ -84,32 +44,32 @@ const Combat = struct {
     punch_side: [2][]const Anim.Ops,
 
     pub fn endAttack(this: *Combat) void {
-        this.combo = 0;
+        this.chain = 0;
         this.is_attacking = false;
         this.actor.image = player_blit;
         this.actor.offset = player_offset;
-        this.actor.image.?.flags.flip_x = this.actor.facing == .Left;
+        this.actor.image.flags.flip_x = this.actor.facing == .Left;
         // Arrest momentum
         this.actor.last_pos = this.actor.pos;
     }
 
     pub fn startAttack(this: *Combat, now: usize) void {
-        if (!this.actor.animator.interruptable) {
-            this.combo = 0;
+        if (!this.animator.interruptable) {
+            this.chain = 0;
             return;
         }
-        if (now - this.last_attacking <= 20) {
-            this.combo +|= 1;
+        if (now - this.last_attacking <= 45) {
+            this.chain +|= 1;
         }
         this.actor.image = this.image;
         this.actor.offset = this.offset;
         if (this.actor.facing == .Down) {
-            this.actor.animator.play(this.punch_down[this.last_attack]);
+            this.animator.play(this.punch_down[this.last_attack]);
         } else if (this.actor.facing == .Up) {
-            this.actor.animator.play(this.punch_up[this.last_attack]);
+            this.animator.play(this.punch_up[this.last_attack]);
         } else {
-            this.actor.animator.play(this.punch_side[this.last_attack]);
-            this.actor.image.?.flags.flip_x = this.actor.facing == .Left;
+            this.animator.play(this.punch_side[this.last_attack]);
+            this.actor.image.flags.flip_x = this.actor.facing == .Left;
         }
         this.is_attacking = true;
         this.last_attacking = now;
@@ -119,23 +79,20 @@ const Combat = struct {
 
 const player_blit = draw.Blit.init_frame(world.player_style, &world.player_bmp, .{ .bpp = .b2 }, .{ 16, 16 }, 0);
 const player_offset = geom.Vec2f{ -8, -12 };
-var player = Actor{
-    .animator = .{ .anim = &world.player_anim_walk_down },
-    .pos = geom.Vec2f{ 80, 80 },
-    .last_pos = geom.Vec2f{ 80, 80 },
-    .rect = geom.AABBf{ -3, -3, 6, 6 },
-    .shadow = geom.AABBf{ -6.5, 1, 12, 5 },
-    .offset = geom.Vec2f{ -8, -12 },
-    .image = player_blit,
-};
+var playerIndex: usize = undefined;
 var player_combat = Combat{
-    .actor = &player,
+    .actor = undefined,
+    .animator = undefined,
     .offset = geom.Vec2f{ -16, -20 },
     .image = draw.Blit.init_frame(world.player_style, &world.player_punch_bmp, .{ .bpp = .b2 }, .{ 32, 32 }, 0),
     .punch_down = .{ &world.player_anim_punch_down, &world.player_anim_punch_down2 },
     .punch_up = .{ &world.player_anim_punch_up, &world.player_anim_punch_up2 },
     .punch_side = .{ &world.player_anim_punch_side, &world.player_anim_punch_side2 },
 };
+
+var actors: []Actor = undefined;
+const AnimStore = struct { owns: usize, anim: Anim } ;
+var animators: []AnimStore = undefined;
 
 var room: world.Room = undefined;
 
@@ -156,26 +113,54 @@ fn start_safe() !void {
     var reader = cursor.reader();
     {
         const entity_count = try reader.readInt(u8, .Little);
+        actors = try long_alloc.alloc(Actor, entity_count);
+        var needs_animator: usize = 0;
         var i: usize = 0;
         while (i < entity_count) : (i += 1) {
             const entity = try world.Entity.read(reader);
+            const tile_sizef = geom.vec2.itof(world.tile_size);
+            const pos = entity.toPos() * tile_sizef + (tile_sizef / @splat(2, @as(f32, 2)));
             if (entity.kind == .Player) {
-                const tile_sizef = geom.vec2.itof(world.tile_size);
-                player.pos = entity.toPos() * tile_sizef;
-                player.last_pos = entity.toPos() * tile_sizef;
+                needs_animator += 1;
+                actors[i] = Actor{
+                    .kind = entity.kind,
+                    .pos = pos,
+                    .last_pos = pos,
+                    .collisionBox = geom.AABBf{ -3, -3, 6, 6 },
+                    .offset = geom.Vec2f{ -8, -12 },
+                    .image = player_blit,
+                };
+                player_combat.actor = &actors[i];
+                w4.tracef("[start] playerIndex %d", i);
+            } else {
+                actors[i] = Actor{
+                    .kind = entity.kind,
+                    .pos = pos,
+                    .last_pos = pos,
+                    .collisionBox = geom.AABBf{ -3, -3, 6, 6 },
+                    .offset = geom.Vec2f{ -8, -12 },
+                    .image = draw.Blit.init_frame(0x0234, &world.bitmap, .{ .bpp = .b2 }, .{ 16, 16 }, world.pot),
+                };
+            }
+        }
+
+        // Add animator components
+        animators = try long_alloc.alloc(AnimStore, needs_animator);
+        var idx: usize = 0;
+        for (actors) |actor| {
+            if (actor.kind == .Player) {
+                animators[idx] = .{ .owns = idx, .anim = .{
+                    .anim = &world.player_anim_walk_down,
+                } };
+                player_combat.animator = &animators[idx].anim;
+                idx += 1;
             }
         }
     }
     {
         const room_count = try reader.readInt(u8, .Little);
         w4.tracef("%d", room_count);
-        // var i: usize = 0;
-        // while (i < entity_count) : (i += 1) {
         room = try world.Room.read(long_alloc, reader);
-        // if (entity.kind == .Player) {
-        // TODO
-        // }
-        // }
     }
 }
 
@@ -196,73 +181,78 @@ fn update_safe() !void {
     _ = alloc;
     defer frame_fba[(time + 1) % 2].reset();
 
-    // Input
-    var moving = false;
-    const speed: f32 = 60.0 / 60.0;
-    if (!player_combat.is_attacking) {
-        if (input.btn(.one, .up)) {
-            player.facing = .Up;
-            player.pos[1] -= speed;
-            moving = true;
-        }
-        if (input.btn(.one, .left)) {
-            player.facing = .Left;
-            player.pos[0] -= speed;
-            moving = true;
-        }
-        if (input.btn(.one, .right)) {
-            player.facing = .Right;
-            player.pos[0] += speed;
-            moving = true;
-        }
-        if (input.btn(.one, .down)) {
-            player.facing = .Down;
-            player.pos[1] += speed;
-            moving = true;
-        }
-        if (moving and player_combat.is_attacking) player_combat.endAttack();
-        if (input.btnp(.one, .z)) player_combat.startAttack(time);
-
-    } else if(!player_combat.actor.animator.interruptable) {
-        player.pos += player.facing.getVector() * @splat(2, speed * 1.25);
-
-    } else {
-        if (input.btnp(.one, .z)) player_combat.startAttack(time);
-        if (time - player_combat.last_attacking > 45) player_combat.endAttack();
-    }
-
-    // Collision
-    const hcols = collide(geom.Vec2f{ player.pos[0], player.last_pos[1] } + geom.aabb.posf(player.rect), geom.aabb.sizef(player.rect));
-    const vcols = collide(geom.Vec2f{ player.last_pos[0], player.pos[1] } + geom.aabb.posf(player.rect), geom.aabb.sizef(player.rect));
-    if (hcols.len > 0) player.pos[0] = player.last_pos[0];
-    if (vcols.len > 0) player.pos[1] = player.last_pos[1];
-
-    if (moving and player.animator.interruptable) {
-        if (player.facing == .Up) player.animator.play(&world.player_anim_walk_up);
-        if (player.facing == .Down) player.animator.play(&world.player_anim_walk_down);
-        if (player.facing == .Left) {
-            player.image.?.flags.flip_x = true;
-            player.animator.play(&world.player_anim_walk_side);
-        }
-        if (player.facing == .Right) {
-            player.image.?.flags.flip_x = false;
-            player.animator.play(&world.player_anim_walk_side);
-        }
-    } else {
+    {
+        // Input
+        var player = &actors[playerIndex];
+        player.motive = false;
+        const speed: f32 = 60.0 / 60.0;
         if (!player_combat.is_attacking) {
-            if (player.facing == .Down) {
-                player.animator.play(&world.player_anim_stand_down);
-            } else if (player.facing == .Left or player.facing == .Right) {
-                player.animator.play(&world.player_anim_stand_side);
-            } else {
-                player.animator.play(&world.player_anim_stand_up);
+            if (input.btn(.one, .up)) {
+                player.facing = .Up;
+                player.pos[1] -= speed;
+                player.motive = true;
+            }
+            if (input.btn(.one, .left)) {
+                player.facing = .Left;
+                player.pos[0] -= speed;
+                player.motive = true;
+            }
+            if (input.btn(.one, .right)) {
+                player.facing = .Right;
+                player.pos[0] += speed;
+                player.motive = true;
+            }
+            if (input.btn(.one, .down)) {
+                player.facing = .Down;
+                player.pos[1] += speed;
+                player.motive = true;
+            }
+            if (player.motive and player_combat.is_attacking) player_combat.endAttack();
+            if (input.btnp(.one, .z)) player_combat.startAttack(time);
+        } else if (!player_combat.animator.interruptable) {
+            player.pos += player.facing.getVec2f() * @splat(2, speed * 1.25);
+        } else {
+            if (input.btnp(.one, .z)) player_combat.startAttack(time);
+            if (time - player_combat.last_attacking > 45) player_combat.endAttack();
+        }
+
+        // Collision
+        const as_rectf = geom.aabb.as_rectf;
+        const shiftf = geom.rect.shiftf;
+        const hcols = collide(playerIndex, shiftf(as_rectf(player.collisionBox), geom.Vec2f{player.pos[0], player.last_pos[1]}));
+        const vcols = collide(playerIndex, shiftf(as_rectf(player.collisionBox), geom.Vec2f{player.last_pos[0], player.pos[1]}));
+        if (hcols.len > 0) player.pos[0] = player.last_pos[0];
+        if (vcols.len > 0) player.pos[1] = player.last_pos[1];
+
+        // Kinematics
+        const velocity = (player.pos - player.last_pos) * @splat(2, @as(f32, 0.5));
+        player.last_pos = player.pos;
+        player.pos += velocity;
+
+        var animator = player_combat.animator;
+        if (player.motive and animator.interruptable) {
+            if (player.facing == .Up) animator.play(&world.player_anim_walk_up);
+            if (player.facing == .Down) animator.play(&world.player_anim_walk_down);
+            if (player.facing == .Left) {
+                player.image.flags.flip_x = true;
+                animator.play(&world.player_anim_walk_side);
+            }
+            if (player.facing == .Right) {
+                player.image.flags.flip_x = false;
+                animator.play(&world.player_anim_walk_side);
+            }
+        } else {
+            if (!player_combat.is_attacking) {
+                if (player.facing == .Down) {
+                    animator.play(&world.player_anim_stand_down);
+                } else if (player.facing == .Left or player.facing == .Right) {
+                    animator.play(&world.player_anim_stand_side);
+                } else {
+                    animator.play(&world.player_anim_stand_up);
+                }
             }
         }
     }
-
-    const velocity = (player.pos - player.last_pos) * @splat(2, @as(f32, 0.5));
-    player.last_pos = player.pos;
-    player.pos += velocity;
 
     // Render
     w4.DRAW_COLORS.* = 0x1234;
@@ -275,28 +265,23 @@ fn update_safe() !void {
         }
     }
 
-    player.render();
+    for (animators) |*store| {
+        var actor = &actors[store.owns];
+        store.anim.update(&actor.image.frame, &actor.image.flags);
+    }
+
+    for (actors) |*actor| {
+        actor.render();
+        const aabb = geom.aabb.addvf(actor.collisionBox, actor.pos);
+        w4.DRAW_COLORS.* = 0x4444;
+        w4.rect(@floatToInt(i32, aabb[0]),@floatToInt(i32, aabb[1]), @floatToInt(usize, aabb[2]), @floatToInt(usize, aabb[3]));
+    }
 
     w4.DRAW_COLORS.* = 0x0041;
-    var combo_text: [9:0]u8 = .{ 'C', 'O', 'M', 'B', 'O', ':', ' ', ' ', 0 };
-    combo_text[7] = '0' + @divTrunc(player_combat.combo, 10);
-    combo_text[8] = '0' + @mod(player_combat.combo, 10);
-    w4.text(&combo_text, 0, 0);
-
-    if (debug) {
-        for (hcols.items[0..hcols.len]) |col| {
-            const pos = geom.vec2.ftoi(geom.aabb.posf(col));
-            const size = geom.vec2.ftoi(geom.aabb.sizef(col));
-            w4.DRAW_COLORS.* = 0x0040;
-            w4.rect(pos[0], pos[1], @intCast(u32, size[0]), @intCast(u32, size[1]));
-        }
-        for (vcols.items[0..vcols.len]) |col| {
-            const pos = geom.vec2.ftoi(geom.aabb.posf(col));
-            const size = geom.vec2.ftoi(geom.aabb.sizef(col));
-            w4.DRAW_COLORS.* = 0x0040;
-            w4.rect(pos[0], pos[1], @intCast(u32, size[0]), @intCast(u32, size[1]));
-        }
-    }
+    var chain_text: [9:0]u8 = .{ 'C', 'H', 'A', 'I', 'N', ':', ' ', ' ', 0 };
+    chain_text[6] = '0' + @divTrunc(player_combat.chain, 10);
+    chain_text[7] = '0' + @mod(player_combat.chain, 10);
+    w4.text(&chain_text, 0, 0);
 }
 
 pub fn isSolid(tile: u8) bool {
@@ -311,11 +296,21 @@ pub fn isInMapBounds(x: i32, y: i32) bool {
     return x >= 0 and y >= 0 and x < 10 and y < 10;
 }
 
-pub fn collide(pos: geom.Vec2f, size: geom.Vec2f) CollisionInfo {
+pub fn collide(which: usize, rect: geom.Rectf) CollisionInfo {
     const tile_sizef = geom.vec2.itof(world.tile_size);
-    const top_left = pos / tile_sizef;
-    const bot_right = top_left + size / tile_sizef;
     var collisions = CollisionInfo.init();
+
+    for (actors) |actor, i| {
+        if (which == i) continue;
+        var o_rect = geom.aabb.as_rectf(geom.aabb.addvf(actor.collisionBox, actor.pos));
+        if (geom.rect.overlapsf(rect, o_rect)) {
+            collisions.append(actor.collisionBox);
+            w4.tracef("collision!");
+        }
+    }
+
+    const top_left = geom.rect.top_leftf(rect) / tile_sizef;
+    const bot_right = top_left + geom.rect.sizef(rect) / tile_sizef;
 
     var i: isize = @floatToInt(i32, top_left[0]);
     while (i <= @floatToInt(i32, bot_right[0])) : (i += 1) {

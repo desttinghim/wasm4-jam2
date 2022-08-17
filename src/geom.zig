@@ -5,30 +5,35 @@ pub const Vec2f = @Vector(2, f32);
 /// Represents a 2D signed Vector as .{ x, y }
 pub const Vec2 = @Vector(2, i32);
 
+pub const Direction = enum {
+    Down,
+    Left,
+    Right,
+    Up,
+    pub fn getVec2(this: @This()) Vec2 {
+        return switch (this) {
+            .Up => .{ 0, -1 },
+            .Left => .{ -1, 0 },
+            .Right => .{ 1, 0 },
+            .Down => .{ 0, 1 },
+        };
+    }
+    pub fn getVec2f(this: @This()) Vec2f {
+        return switch (this) {
+            .Up => .{ 0, -1 },
+            .Left => .{ -1, 0 },
+            .Right => .{ 1, 0 },
+            .Down => .{ 0, 1 },
+        };
+    }
+};
+
 /// Contains convenience functions for working with vectors.
 pub const vec2 = struct {
     /// Vector index representing x
     pub const x = 0;
     /// Vector index representing y
     pub const y = 1;
-
-    /// 2D up vector (i32)
-    pub const up = Vec2{ 0, -1 };
-    /// 2D down vector (i32)
-    pub const down = Vec2{ 0, 1 };
-    /// 2D left vector (i32)
-    pub const left = Vec2{ -1, 0 };
-    /// 2D right vector (i32)
-    pub const right = Vec2{ 1, 0 };
-
-    /// 2D up vector
-    pub const upf = Vec2f{ 0, -1 };
-    /// 2D down vector
-    pub const downf = Vec2f{ 0, 1 };
-    /// 2D left vector
-    pub const leftf = Vec2f{ -1, 0 };
-    /// 2D right vector
-    pub const rightf = Vec2f{ 1, 0 };
 
     /////////////////////////////////////////
     // i32 integer backed vector functions //
@@ -81,6 +86,11 @@ pub const vec2 = struct {
     pub fn distf(a: Vec2f, b: Vec2f) f32 {
         var subbed = @fabs(a - b);
         return lengthf(subbed);
+    }
+
+    /// Copies the vectors x and y to make a rect
+    pub fn doublef(v: Vec2f) Rectf {
+        return Rectf{ v[0], v[1], v[0], v[1] };
     }
 
     /// Returns the length between two vectors
@@ -358,11 +368,18 @@ pub const rect = struct {
     }
 
     pub fn containsf(rectangle: Rectf, vector: Vec2f) bool {
-        return @reduce(.And, top_left(rectangle) < vector) and @reduce(.And, bottom_right(rectangle) > vector);
+        return @reduce(.And, top_leftf(rectangle) < vector) and @reduce(.And, bottom_rightf(rectangle) > vector);
+    }
+
+    pub fn overlapsf(rect1: Rectf, rect2: Rectf) bool {
+        return rect1[0] < rect2[2] and
+            rect1[2] > rect2[0] and
+            rect1[1] < rect2[3] and
+            rect1[3] > rect2[1];
     }
 
     pub fn shiftf(rectangle: Rectf, vector: Vec2f) Rectf {
-        return rectangle + vec2.double(vector);
+        return rectangle + vec2.doublef(vector);
     }
 };
 
@@ -436,7 +453,7 @@ pub const aabb = struct {
     }
 
     pub fn addvf(box: AABBf, v2: Vec2f) AABBf {
-        return initv(pos(box) + v2, size(box));
+        return initvf(posf(box) + v2, sizef(box));
     }
 
     pub fn subvf(box: AABBf, v2: Vec2f) AABBf {
