@@ -466,4 +466,8 @@ pub const aabb = struct {
     pub fn subvf(box: AABBf, v2: Vec2f) AABBf {
         return initv(pos(box) - v2, size(box));
     }
+
+    pub fn itof(r: Rect) Rectf {
+        return Rectf{ @intToFloat(f32, r[0]), @intToFloat(f32, r[1]), @intToFloat(f32, r[2]), @intToFloat(f32, r[3]) };
+    }
 };

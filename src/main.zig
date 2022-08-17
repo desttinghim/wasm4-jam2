@@ -9,8 +9,8 @@ const Anim = @import("Anim.zig");
 const world_data = @embedFile(@import("world_data").path);
 
 const builtin = @import("builtin");
-const debug = builtin.mode == .Debug;
-// const debug = false;
+// const debug = builtin.mode == .Debug;
+const debug = false;
 
 const FBA = std.heap.FixedBufferAllocator;
 
@@ -18,7 +18,7 @@ var long_alloc_buffer: [8192]u8 = undefined;
 var long_fba = FBA.init(&long_alloc_buffer);
 const long_alloc = long_fba.allocator();
 
-var frame_alloc_buffer: [2][4096]u8 = undefined;
+var frame_alloc_buffer: [2][8192]u8 = undefined;
 var frame_fba: [2]FBA = .{
     FBA.init(&frame_alloc_buffer[0]),
     FBA.init(&frame_alloc_buffer[1]),
@@ -212,7 +212,10 @@ fn start_safe() !void {
 }
 
 export fn update() void {
-    update_safe() catch unreachable;
+    update_safe() catch |e| {
+        w4.tracef(@errorName(e));
+        @panic("Ran into an error! ");
+    };
 }
 
 var time: usize = 0;
@@ -234,7 +237,7 @@ fn update_safe() !void {
         // Input
         var player = &actors.items[playerIndex];
         player.motive = false;
-        const speed: f32 = 60.0 / 60.0;
+        const speed: f32 = 40.0 / 60.0;
         if (!player_combat.is_attacking) {
             if (input.btn(.one, .up)) {
                 player.facing = .Up;
@@ -279,7 +282,14 @@ fn update_safe() !void {
         player.last_pos = player.pos;
         player.pos += velocity;
 
-        camera = player.pos - geom.Vec2f{ 80, 80 };
+        {
+            camera = player.pos - geom.Vec2f{ 80, 80 };
+            const bounds = geom.aabb.as_rectf(geom.aabb.itof(room.toAABB() * @splat(4, world.tile_size[0])));
+            if (camera[0] < bounds[0]) camera[0] = bounds[0];
+            if (camera[1] < bounds[1]) camera[1] = bounds[1];
+            if (camera[0] + 160 > bounds[2]) camera[0] = bounds[2] - 160;
+            if (camera[1] + 160 > bounds[3]) camera[1] = bounds[3] - 160;
+        }
 
         var animator = player_combat.animator;
         if (player.motive and animator.interruptable) {
@@ -327,24 +337,35 @@ fn update_safe() !void {
         store.anim.update(&actor.image.frame, &actor.image.flags);
     }
 
+    var draw_order = try std.ArrayList(*Actor).initCapacity(alloc, actors.items.len);
+    defer draw_order.deinit();
+
+    for (actors.items) |*actor| {
+        try draw_order.append(actor);
+    }
+
+    std.sort.sort(*Actor, draw_order.items, {}, Actor.compare);
+    for (draw_order.items) |actor| {
+        const pos = geom.vec2.ftoi(actor.pos + actor.offset) - camera_pos;
+        actor.image.blit(pos);
+        const aabb = geom.aabb.subv(geom.rect.as_aabb(geom.rect.ftoi(actor.getRect())), camera_pos);
+        if (debug) {
+            w4.DRAW_COLORS.* = 0x0040;
+            w4.rect(aabb[0], aabb[1], @intCast(usize, aabb[2]), @intCast(usize, aabb[3]));
+        }
+    }
+
     // Store actors to remove
     var to_remove = std.ArrayList(usize).init(alloc);
     defer to_remove.deinit();
 
-    // Update actors
+    // Remove actors
     for (actors.items) |*actor, actorIdx| {
-        const pos = geom.vec2.ftoi(actor.pos + actor.offset) - camera_pos;
-        actor.image.blit(pos);
         for (hurtboxes.items) |box| {
             if (box.key == actorIdx) continue;
             if (geom.rect.overlapsf(box.val, actor.getRect())) {
                 try to_remove.append(actorIdx);
             }
-        }
-        const aabb = geom.aabb.subv(geom.rect.as_aabb(geom.rect.ftoi(actor.getRect())), camera_pos);
-        if (debug) {
-            w4.DRAW_COLORS.* = 0x0040;
-            w4.rect(aabb[0], aabb[1], @intCast(usize, aabb[2]), @intCast(usize, aabb[3]));
         }
     }
 

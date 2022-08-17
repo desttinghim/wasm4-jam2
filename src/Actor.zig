@@ -28,3 +28,8 @@ pub fn isMoving(this: Actor) bool {
 pub fn getRect(this: Actor) geom.Rectf {
     return geom.aabb.as_rectf(geom.aabb.addvf(this.collisionBox, this.pos));
 }
+
+pub fn compare(ctx: void, a: *const Actor, b: *const Actor) bool {
+    _ = ctx;
+    return a.pos[1] + a.offset[1] < b.pos[1] + b.offset[1];
+}
