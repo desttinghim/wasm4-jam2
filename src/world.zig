@@ -11,7 +11,7 @@ pub const bitmap = draw.Bitmap{
 };
 pub const tile_size = geom.Vec2{ 16, 16 };
 pub const tilemap_size = @divFloor(geom.Vec2{ bitmap.width, bitmap.height }, tile_size);
-pub const room_size = geom.Vec2{ 10, 10 };
+pub const room_grid_size = geom.Vec2{ 10, 10 };
 
 /// Blits the given tile to the screen. w4.DRAW_COLORS must be set before calling function
 pub fn blit(pos: geom.Vec2, tile: isize) void {
@@ -139,21 +139,25 @@ pub const Entity = struct {
     }
 
     pub fn toPos(entity: Entity) geom.Vec2f {
-        return geom.vec2.itof(.{ entity.vec[0], entity.vec[1] });
+        return geom.vec2.itof(entity.toVec2());
+    }
+
+    pub fn toVec2(entity: Entity) geom.Vec2 {
+        return geom.Vec2{ entity.vec[0], entity.vec[1] } * tile_size;
     }
 
     /// Convert vec directly to geom.Vec2 for doing math
     pub fn toVec(entity: Entity) geom.Vec2 {
-        return .{ entity.vec[0], entity.vec[1] };
+        return geom.Vec2{ entity.vec[0], entity.vec[1] };
     }
 
     pub fn addRoomPos(entity: Entity, room: Room) Entity {
-        const vec = entity.toVec() + room.toVec() * room_size;
+        const vec = entity.toVec() + room.toVec2();
         return .{ .vec = .{ @intCast(i16, vec[0]), @intCast(i16, vec[1]) }, .kind = entity.kind };
     }
 
     pub fn subRoomPos(entity: Entity, room: Room) Entity {
-        const vec = entity.toVec() - room.toVec() * room_size;
+        const vec = entity.toVec() - room.toVec2();
         return .{ .vec = .{ @intCast(i16, vec[0]), @intCast(i16, vec[1]) }, .kind = entity.kind };
     }
 
@@ -177,29 +181,79 @@ pub const Entity = struct {
 pub const Room = struct {
     /// Location measured in rooms
     coord: [2]i8,
+    size: [2]u8,
     tiles: []u8,
+    num: usize = 0,
 
     pub fn toVec(room: Room) geom.Vec2 {
         return .{ room.coord[0], room.coord[1] };
     }
 
+    pub fn toVec2(room: Room) geom.Vec2 {
+        return geom.Vec2{ room.coord[0], room.coord[1] } * room_grid_size;
+    }
+
+    pub fn toAABB(room: Room) geom.AABB {
+        const pos = room.toVec2();
+        return .{ pos[0], pos[1], room.size[0], room.size[1] };
+    }
+
     pub fn write(room: Room, writer: anytype) !void {
         try writer.writeInt(i8, room.coord[0], .Little);
         try writer.writeInt(i8, room.coord[1], .Little);
+        try writer.writeInt(u8, room.size[0], .Little);
+        try writer.writeInt(u8, room.size[1], .Little);
         for (room.tiles) |tile| {
             try writer.writeByte(tile);
         }
     }
 
+    pub fn findAndRead(alloc: std.mem.Allocator, reader: anytype, coord2Find: geom.Vec2) !Room {
+        var count: usize = 0;
+        while (count < 255) : (count += 1){
+            // If we don't find the room, we crash
+            const x = try reader.readInt(i8, .Little);
+            const y = try reader.readInt(i8, .Little);
+            const size_x = try reader.readInt(u8, .Little);
+            const size_y = try reader.readInt(u8, .Little);
+            const rect = geom.aabb.as_rect(geom.aabb.initv(geom.Vec2{x, y} * room_grid_size, geom.Vec2{size_x, size_y}));
+            const w4 = @import("wasm4.zig");
+            w4.tracef("[findAndRead:%d] (%d,%d) [%d,%d]", count, x, y, size_x, size_y);
+            if (geom.rect.contains(rect, coord2Find)) {
+                w4.tracef("[findAndRead] Room found!");
+                const tile_slice = try alloc.alloc(u8, @intCast(usize, size_x) * @intCast(usize, size_y));
+                for (tile_slice) |*tile| {
+                    tile.* = try reader.readByte();
+                }
+                return Room{
+                    .coord = .{ x, y },
+                    .size = .{size_x, size_y},
+                    .tiles = tile_slice,
+                    .num = count,
+                };
+            } else {
+                w4.tracef("[findAndRead] Wrong room, (%d,%d,%d,%d) does not contain (%d,%d). Skipping...", rect[0], rect[1], rect[2], rect[3], coord2Find[0], coord2Find[1]);
+                var i: usize = 0;
+                while (i < size_x * size_y) : (i += 1) {
+                    _ = try reader.readByte();
+                }
+            }
+        }
+        return error.NoSuchRoom;
+    }
+
     pub fn read(alloc: std.mem.Allocator, reader: anytype) !Room {
-        const tile_slice = try alloc.alloc(u8, 100);
         const x = try reader.readInt(i8, .Little);
         const y = try reader.readInt(i8, .Little);
+        const size_x = try reader.readInt(u8, .Little);
+        const size_y = try reader.readInt(u8, .Little);
+        const tile_slice = try alloc.alloc(u8, @intCast(usize, size_x) * @intCast(usize, size_y));
         for (tile_slice) |*tile| {
             tile.* = try reader.readByte();
         }
         return Room{
             .coord = .{ x, y },
+            .size = .{size_x, size_y},
             .tiles = tile_slice,
         };
     }

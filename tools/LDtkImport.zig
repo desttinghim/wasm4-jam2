@@ -79,14 +79,19 @@ fn make(step: *std.build.Step) !void {
     defer data.deinit();
     const writer = data.writer();
 
-    try writer.writeInt(u8, @intCast(u8, entities.items.len), .Little);
+    var player_count: usize = 0;
+    try writer.writeInt(u16, @intCast(u8, entities.items.len), .Little);
     for (entities.items) |entity| {
+        if (entity.kind == .Player) player_count += 1;
         try entity.write(writer);
     }
 
+    if (player_count > 1) std.log.warn("Too many players!", .{});
+
     try writer.writeInt(u8, @intCast(u8, rooms.items.len), .Little);
-    for (rooms.items) |room| {
+    for (rooms.items) |room, i| {
         try room.write(writer);
+        std.log.warn("Room {}: ({},{}) [{},{}]", .{i, room.coord[0], room.coord[1], room.size[0], room.size[1]});
     }
 
     // Open output file and write data into it
@@ -116,7 +121,17 @@ fn parseLevel(opt: struct {
     const world_x: i8 = @intCast(i8, @divFloor(level.worldX, (ldtk.worldGridWidth orelse 160)));
     const world_y: i8 = @intCast(i8, @divFloor(level.worldY, (ldtk.worldGridHeight orelse 160)));
 
-    const room = world.Room{.coord = .{world_x, world_y}, .tiles = try allocator.alloc(u8, 100)};
+    const size_x_usize = @intCast(usize, @divFloor(level.pxWid, (world.tile_size[0])));
+    const size_y_usize = @intCast(usize, @divFloor(level.pxHei, (world.tile_size[1])));
+
+    const size_x: u8 = @intCast(u8, size_x_usize);
+    const size_y: u8 = @intCast(u8, size_y_usize);
+
+    const room = world.Room{
+        .coord = .{ world_x, world_y },
+        .size = .{ size_x, size_y },
+        .tiles = try allocator.alloc(u8, size_x_usize * size_y_usize),
+    };
 
     var cliff_layer: ?LDtk.LayerInstance = null;
     var environment_layer: ?LDtk.LayerInstance = null;
@@ -167,6 +182,7 @@ fn parseLevel(opt: struct {
     std.debug.assert(cliff.__cHei == environment.__cHei);
 
     const width = @intCast(u16, cliff.__cWid);
+    std.debug.assert(width == room.size[0]);
 
     for (room.tiles) |_, i| {
         room.tiles[i] = 0;

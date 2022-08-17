@@ -112,8 +112,6 @@ pub const vec2 = struct {
     }
 
     /// Converts a f32 backed vector to an i32 backed one.
-    /// NOTE: Conversion between floats and ints on WASM appears
-    /// to be broken, so this may not return the correct results.
     pub fn ftoi(vec2f: Vec2f) Vec2 {
         return Vec2{ @floatToInt(i32, @floor(vec2f[0])), @floatToInt(i32, @floor(vec2f[1])) };
     }
@@ -340,7 +338,7 @@ pub const rect = struct {
     /////////////////////////////////////
 
     pub fn initvf(v1: Vec2f, v2: Vec2f) Rectf {
-        return .{v1[0], v1[1], v2[0], v2[1]};
+        return .{ v1[0], v1[1], v2[0], v2[1] };
     }
 
     pub fn topf(rectangle: Rectf) f32 {
@@ -384,6 +382,11 @@ pub const rect = struct {
 
     pub fn shiftf(rectangle: Rectf, vector: Vec2f) Rectf {
         return rectangle + vec2.doublef(vector);
+    }
+
+    /// Converts a f32 backed vector to an i32 backed one.
+    pub fn ftoi(r: Rectf) Rect {
+        return Rect{ @floatToInt(i32, @floor(r[0])), @floatToInt(i32, @floor(r[1])), @floatToInt(i32, @floor(r[2])), @floatToInt(i32, @floor(r[3])) };
     }
 };
 

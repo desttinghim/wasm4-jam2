@@ -9,12 +9,12 @@ const Anim = @import("Anim.zig");
 const world_data = @embedFile(@import("world_data").path);
 
 const builtin = @import("builtin");
-// const debug = builtin.mode == .Debug;
-const debug = false;
+const debug = builtin.mode == .Debug;
+// const debug = false;
 
 const FBA = std.heap.FixedBufferAllocator;
 
-var long_alloc_buffer: [4096]u8 = undefined;
+var long_alloc_buffer: [8192]u8 = undefined;
 var long_fba = FBA.init(&long_alloc_buffer);
 const long_alloc = long_fba.allocator();
 
@@ -58,19 +58,19 @@ const Combat = struct {
     pub fn getHurtbox(this: Combat) geom.Rectf {
         // This will be called after startAttack, so last_attack == 0 is flipped
         if (this.last_attack == 0) {
-        return switch (this.actor.facing) {
-            .Up => .{-4, -20, 13, 10},
-            .Left => .{-16, -10, 12, 11},
-            .Right => .{4, -10, 12, 11},
-            .Down => .{-4, 0, 12, 12},
-        };
+            return switch (this.actor.facing) {
+                .Up => .{ -4, -20, 13, 10 },
+                .Left => .{ -16, -10, 12, 11 },
+                .Right => .{ 4, -10, 12, 11 },
+                .Down => .{ -4, 0, 12, 12 },
+            };
         } else {
-        return switch (this.actor.facing) {
-            .Up => .{-7, -20, 13, 10},
-            .Left => .{-16, -10, 12, 11},
-            .Right => .{4, -10, 12, 11},
-            .Down => .{-8, 0, 12, 12},
-        };
+            return switch (this.actor.facing) {
+                .Up => .{ -7, -20, 13, 10 },
+                .Left => .{ -16, -10, 12, 11 },
+                .Right => .{ 4, -10, 12, 11 },
+                .Down => .{ -8, 0, 12, 12 },
+            };
         }
     }
 
@@ -110,13 +110,14 @@ var player_combat = Combat{
     .punch_up = .{ &world.player_anim_punch_up, &world.player_anim_punch_up2 },
     .punch_side = .{ &world.player_anim_punch_side, &world.player_anim_punch_side2 },
 };
+var camera = geom.Vec2f{ 0, 0 };
 
 var actors: std.ArrayList(Actor) = undefined;
 const AnimStore = struct { owns: usize, anim: Anim };
 var animators: []AnimStore = undefined;
 
 fn Assoc(comptime T: type) type {
-    return struct {key: usize, val: T};
+    return struct { key: usize, val: T };
 }
 
 var room: world.Room = undefined;
@@ -125,7 +126,10 @@ export fn start() void {
     if (debug) {
         w4.tracef("tilemap_size = (%d, %d)", world.tilemap_size[0], world.tilemap_size[1]);
     }
-    start_safe() catch |e| w4.tracef(@errorName(e));
+    start_safe() catch |e| {
+        w4.tracef(@errorName(e));
+        @panic("Ran into an error! ");
+    };
 }
 
 fn start_safe() !void {
@@ -134,18 +138,24 @@ fn start_safe() !void {
         .pos = 0,
         .buffer = world_data,
     };
+
     if (debug) w4.tracef("%d", world_data.len);
+
     var reader = cursor.reader();
+
+    var spawn: ?geom.Vec2 = null;
     {
-        const entity_count = try reader.readInt(u8, .Little);
+        const entity_count = try reader.readInt(u16, .Little);
         actors = try std.ArrayList(Actor).initCapacity(long_alloc, entity_count);
+        var player_count: usize = 0;
         var needs_animator: usize = 0;
         var i: usize = 0;
         while (i < entity_count) : (i += 1) {
             const entity = try world.Entity.read(reader);
             const tile_sizef = geom.vec2.itof(world.tile_size);
-            const pos = entity.toPos() * tile_sizef + (tile_sizef / @splat(2, @as(f32, 2)));
+            const pos = entity.toPos() + (tile_sizef / @splat(2, @as(f32, 2)));
             if (entity.kind == .Player) {
+                spawn = entity.toVec();
                 needs_animator += 1;
                 try actors.append(Actor{
                     .kind = entity.kind,
@@ -155,8 +165,9 @@ fn start_safe() !void {
                     .offset = geom.Vec2f{ -8, -12 },
                     .image = player_blit,
                 });
-                player_combat.actor = &actors.items[i];
+                playerIndex = i;
                 if (debug) w4.tracef("[start] playerIndex %d", i);
+                player_count += 1;
             } else {
                 try actors.append(Actor{
                     .kind = entity.kind,
@@ -168,24 +179,35 @@ fn start_safe() !void {
                 });
             }
         }
+        if (debug and player_count == 0) w4.tracef("[start] NO PLAYER FOUND");
 
+        if (playerIndex != 0) {
+            std.mem.swap(Actor, &actors.items[playerIndex], &actors.items[0]);
+            playerIndex = 0;
+            if (debug) w4.tracef("[start] playerIndex swapped to %d", playerIndex);
+        } else {
+            if (debug) w4.tracef("[start] playerIndex already 0");
+        }
+
+        if (debug) w4.tracef("[start] Anim count %d", needs_animator);
         // Add animator components
         animators = try long_alloc.alloc(AnimStore, needs_animator);
         var idx: usize = 0;
-        for (actors.items) |actor| {
+        for (actors.items) |actor, a| {
             if (actor.kind == .Player) {
                 animators[idx] = .{ .owns = idx, .anim = .{
                     .anim = &world.player_anim_walk_down,
                 } };
                 player_combat.animator = &animators[idx].anim;
+                player_combat.actor = &actors.items[a];
                 idx += 1;
             }
         }
     }
     {
         const room_count = try reader.readInt(u8, .Little);
-        w4.tracef("%d", room_count);
-        room = try world.Room.read(long_alloc, reader);
+        room = try world.Room.findAndRead(long_alloc, reader, spawn.?);
+        if (debug) w4.tracef("[start] Loading %d/%d: (%d,%d) [%d,%d]", room.num, room_count, room.coord[0], room.coord[1], room.size[0], room.size[1]);
     }
 }
 
@@ -238,7 +260,7 @@ fn update_safe() !void {
             if (input.btnp(.one, .z)) player_combat.startAttack(time);
         } else if (!player_combat.animator.interruptable) {
             player.pos += player.facing.getVec2f() * @splat(2, speed * 1.25);
-            try hurtboxes.append(.{.key = playerIndex, .val = geom.rect.shiftf(player_combat.getHurtbox(), player.pos) });
+            try hurtboxes.append(.{ .key = playerIndex, .val = geom.rect.shiftf(player_combat.getHurtbox(), player.pos) });
         } else {
             if (input.btnp(.one, .z)) player_combat.startAttack(time);
             if (time - player_combat.last_attacking > 45) player_combat.endAttack();
@@ -256,6 +278,8 @@ fn update_safe() !void {
         const velocity = (player.pos - player.last_pos) * @splat(2, @as(f32, 0.5));
         player.last_pos = player.pos;
         player.pos += velocity;
+
+        camera = player.pos - geom.Vec2f{ 80, 80 };
 
         var animator = player_combat.animator;
         if (player.motive and animator.interruptable) {
@@ -284,40 +308,49 @@ fn update_safe() !void {
 
     // Render
     w4.DRAW_COLORS.* = 0x1234;
+    const camera_pos = geom.vec2.ftoi(camera);
+    // const camera_pos_g = @divTrunc(camera_pos, world.tile_size);
     var x: isize = 0;
-    while (x < 10) : (x += 1) {
+    while (x < room.size[0]) : (x += 1) {
         var y: isize = 0;
-        while (y < 10) : (y += 1) {
-            const idx = @intCast(usize, y * 10 + x);
-            world.blit(geom.Vec2{ x, y } * world.tile_size, room.tiles[idx]);
+        // if (!(x >= camera_pos_g[0] and x < camera_pos_g[0]  + 11)) continue;
+        while (y < room.size[1]) : (y += 1) {
+            // if (!(y >= camera_pos_g[1]  and y < camera_pos_g[1]  + 11)) continue;
+            const idx = @intCast(usize, y * @intCast(i16, room.size[0]) + x);
+            world.blit(geom.Vec2{ x, y } * world.tile_size - camera_pos, room.tiles[idx]);
         }
     }
 
+    // Animate!
     for (animators) |*store| {
         var actor = &actors.items[store.owns];
         store.anim.update(&actor.image.frame, &actor.image.flags);
     }
 
+    // Store actors to remove
     var to_remove = std.ArrayList(usize).init(alloc);
     defer to_remove.deinit();
 
+    // Update actors
     for (actors.items) |*actor, actorIdx| {
-        actor.render();
+        const pos = geom.vec2.ftoi(actor.pos + actor.offset) - camera_pos;
+        actor.image.blit(pos);
         for (hurtboxes.items) |box| {
             if (box.key == actorIdx) continue;
             if (geom.rect.overlapsf(box.val, actor.getRect())) {
                 try to_remove.append(actorIdx);
             }
         }
-        const aabb = geom.aabb.addvf(actor.collisionBox, actor.pos);
+        const aabb = geom.aabb.subv(geom.rect.as_aabb(geom.rect.ftoi(actor.getRect())), camera_pos);
         if (debug) {
             w4.DRAW_COLORS.* = 0x0040;
-            w4.rect(@floatToInt(i32, aabb[0]), @floatToInt(i32, aabb[1]), @floatToInt(usize, aabb[2]), @floatToInt(usize, aabb[3]));
+            w4.rect(aabb[0], aabb[1], @intCast(usize, aabb[2]), @intCast(usize, aabb[3]));
         }
     }
 
     std.sort.sort(usize, to_remove.items, {}, comptime std.sort.desc(usize));
 
+    // Remove destroyed items
     for (to_remove.items) |remove| {
         _ = actors.swapRemove(remove);
     }
@@ -335,12 +368,13 @@ pub fn isSolid(tile: u8) bool {
     return (tile >= 1 and tile <= 6) or (tile >= 18 and tile <= 23 and tile != 19) or (tile >= 35 and tile <= 40) or (tile >= 55 and tile <= 57) or (tile >= 72 and tile <= 74);
 }
 
-pub fn isInScreenBounds(x: i32, y: i32) bool {
-    return x >= 0 and y >= 0 and x < w4.CANVAS_SIZE and y < w4.CANVAS_SIZE;
+pub fn isInScreenBounds(pos: geom.Vec2) bool {
+    const bounds = geom.aabb.initv(.{room.toVec() * world.room_grid_size * world.tile_size}, @splat(2, @as(i32, w4.CANVAS_SIZE)));
+    return bounds.contains(pos);
 }
 
-pub fn isInMapBounds(x: i32, y: i32) bool {
-    return x >= 0 and y >= 0 and x < 10 and y < 10;
+pub fn isInMapBounds(pos: geom.Vec2) bool {
+    return pos[0] >= 0 and pos[1] >= 0 and pos[0] < room.size[0] and pos[1] < room.size[1];
 }
 
 pub fn collide(which: usize, rect: geom.Rectf) CollisionInfo {
@@ -352,21 +386,24 @@ pub fn collide(which: usize, rect: geom.Rectf) CollisionInfo {
         var o_rect = geom.aabb.as_rectf(geom.aabb.addvf(actor.collisionBox, actor.pos));
         if (geom.rect.overlapsf(rect, o_rect)) {
             collisions.append(actor.collisionBox);
-            w4.tracef("collision! %d", i);
+            if (debug) w4.tracef("collision! %d", i);
         }
     }
 
-    const top_left = geom.rect.top_leftf(rect) / tile_sizef;
-    const bot_right = top_left + geom.rect.sizef(rect) / tile_sizef;
+    const roomvec = geom.vec2.itof(room.toVec());
+    const top_left_i = geom.rect.top_leftf(rect) / tile_sizef;
+    const bot_right_i = top_left_i + geom.rect.sizef(rect) / tile_sizef;
+    const top_left = top_left_i - roomvec;
+    const bot_right = bot_right_i - roomvec;
 
     var i: isize = @floatToInt(i32, top_left[0]);
     while (i <= @floatToInt(i32, bot_right[0])) : (i += 1) {
         var a: isize = @floatToInt(i32, top_left[1]);
         while (a <= @floatToInt(i32, bot_right[1])) : (a += 1) {
-            if (!isInMapBounds(i, a)) continue;
+            if (!isInMapBounds(.{ i, a })) continue;
             const x = @intCast(usize, i);
             const y = @intCast(usize, a);
-            const idx = y * 10 + x;
+            const idx = y * room.size[0] + x;
             const tile = room.tiles[idx];
             const tilepos = geom.vec2.itof(geom.Vec2{ i, a } * world.tile_size);
 
