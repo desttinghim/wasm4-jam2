@@ -339,6 +339,10 @@ pub const rect = struct {
     // f32 float backed rect functions //
     /////////////////////////////////////
 
+    pub fn initvf(v1: Vec2f, v2: Vec2f) Rectf {
+        return .{v1[0], v1[1], v2[0], v2[1]};
+    }
+
     pub fn topf(rectangle: Rectf) f32 {
         return rectangle[1];
     }

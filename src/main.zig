@@ -9,7 +9,8 @@ const Anim = @import("Anim.zig");
 const world_data = @embedFile(@import("world_data").path);
 
 const builtin = @import("builtin");
-const debug = builtin.mode == .Debug;
+// const debug = builtin.mode == .Debug;
+const debug = false;
 
 const FBA = std.heap.FixedBufferAllocator;
 
@@ -53,6 +54,26 @@ const Combat = struct {
         this.actor.last_pos = this.actor.pos;
     }
 
+    /// Relative to offset
+    pub fn getHurtbox(this: Combat) geom.Rectf {
+        // This will be called after startAttack, so last_attack == 0 is flipped
+        if (this.last_attack == 0) {
+        return switch (this.actor.facing) {
+            .Up => .{-4, -20, 13, 10},
+            .Left => .{-16, -10, 12, 11},
+            .Right => .{4, -10, 12, 11},
+            .Down => .{-4, 0, 12, 12},
+        };
+        } else {
+        return switch (this.actor.facing) {
+            .Up => .{-7, -20, 13, 10},
+            .Left => .{-16, -10, 12, 11},
+            .Right => .{4, -10, 12, 11},
+            .Down => .{-8, 0, 12, 12},
+        };
+        }
+    }
+
     pub fn startAttack(this: *Combat, now: usize) void {
         if (!this.animator.interruptable) {
             this.chain = 0;
@@ -90,9 +111,13 @@ var player_combat = Combat{
     .punch_side = .{ &world.player_anim_punch_side, &world.player_anim_punch_side2 },
 };
 
-var actors: []Actor = undefined;
+var actors: std.ArrayList(Actor) = undefined;
 const AnimStore = struct { owns: usize, anim: Anim };
 var animators: []AnimStore = undefined;
+
+fn Assoc(comptime T: type) type {
+    return struct {key: usize, val: T};
+}
 
 var room: world.Room = undefined;
 
@@ -109,11 +134,11 @@ fn start_safe() !void {
         .pos = 0,
         .buffer = world_data,
     };
-    w4.tracef("%d", world_data.len);
+    if (debug) w4.tracef("%d", world_data.len);
     var reader = cursor.reader();
     {
         const entity_count = try reader.readInt(u8, .Little);
-        actors = try long_alloc.alloc(Actor, entity_count);
+        actors = try std.ArrayList(Actor).initCapacity(long_alloc, entity_count);
         var needs_animator: usize = 0;
         var i: usize = 0;
         while (i < entity_count) : (i += 1) {
@@ -122,32 +147,32 @@ fn start_safe() !void {
             const pos = entity.toPos() * tile_sizef + (tile_sizef / @splat(2, @as(f32, 2)));
             if (entity.kind == .Player) {
                 needs_animator += 1;
-                actors[i] = Actor{
+                try actors.append(Actor{
                     .kind = entity.kind,
                     .pos = pos,
                     .last_pos = pos,
                     .collisionBox = geom.AABBf{ -4, -4, 8, 8 },
                     .offset = geom.Vec2f{ -8, -12 },
                     .image = player_blit,
-                };
-                player_combat.actor = &actors[i];
-                w4.tracef("[start] playerIndex %d", i);
+                });
+                player_combat.actor = &actors.items[i];
+                if (debug) w4.tracef("[start] playerIndex %d", i);
             } else {
-                actors[i] = Actor{
+                try actors.append(Actor{
                     .kind = entity.kind,
                     .pos = pos,
                     .last_pos = pos,
                     .collisionBox = geom.AABBf{ -4, -4, 8, 8 },
                     .offset = geom.Vec2f{ -8, -12 },
                     .image = draw.Blit.init_frame(0x0234, &world.bitmap, .{ .bpp = .b2 }, .{ 16, 16 }, world.pot),
-                };
+                });
             }
         }
 
         // Add animator components
         animators = try long_alloc.alloc(AnimStore, needs_animator);
         var idx: usize = 0;
-        for (actors) |actor| {
+        for (actors.items) |actor| {
             if (actor.kind == .Player) {
                 animators[idx] = .{ .owns = idx, .anim = .{
                     .anim = &world.player_anim_walk_down,
@@ -178,12 +203,14 @@ fn update_safe() !void {
     // Switch frame allocator every frame
     const which_alloc = time % 2;
     const alloc = frame_alloc[which_alloc];
-    _ = alloc;
     defer frame_fba[(time + 1) % 2].reset();
+
+    var hurtboxes = std.ArrayList(Assoc(geom.Rectf)).init(alloc);
+    defer hurtboxes.deinit();
 
     {
         // Input
-        var player = &actors[playerIndex];
+        var player = &actors.items[playerIndex];
         player.motive = false;
         const speed: f32 = 60.0 / 60.0;
         if (!player_combat.is_attacking) {
@@ -211,6 +238,7 @@ fn update_safe() !void {
             if (input.btnp(.one, .z)) player_combat.startAttack(time);
         } else if (!player_combat.animator.interruptable) {
             player.pos += player.facing.getVec2f() * @splat(2, speed * 1.25);
+            try hurtboxes.append(.{.key = playerIndex, .val = geom.rect.shiftf(player_combat.getHurtbox(), player.pos) });
         } else {
             if (input.btnp(.one, .z)) player_combat.startAttack(time);
             if (time - player_combat.last_attacking > 45) player_combat.endAttack();
@@ -266,22 +294,41 @@ fn update_safe() !void {
     }
 
     for (animators) |*store| {
-        var actor = &actors[store.owns];
+        var actor = &actors.items[store.owns];
         store.anim.update(&actor.image.frame, &actor.image.flags);
     }
 
-    for (actors) |*actor| {
+    var to_remove = std.ArrayList(usize).init(alloc);
+    defer to_remove.deinit();
+
+    for (actors.items) |*actor, actorIdx| {
         actor.render();
+        for (hurtboxes.items) |box| {
+            if (box.key == actorIdx) continue;
+            if (geom.rect.overlapsf(box.val, actor.getRect())) {
+                try to_remove.append(actorIdx);
+            }
+        }
         const aabb = geom.aabb.addvf(actor.collisionBox, actor.pos);
-        w4.DRAW_COLORS.* = 0x4444;
-        w4.rect(@floatToInt(i32, aabb[0]), @floatToInt(i32, aabb[1]), @floatToInt(usize, aabb[2]), @floatToInt(usize, aabb[3]));
+        if (debug) {
+            w4.DRAW_COLORS.* = 0x0040;
+            w4.rect(@floatToInt(i32, aabb[0]), @floatToInt(i32, aabb[1]), @floatToInt(usize, aabb[2]), @floatToInt(usize, aabb[3]));
+        }
     }
 
-    w4.DRAW_COLORS.* = 0x0041;
-    var chain_text: [9:0]u8 = .{ 'C', 'H', 'A', 'I', 'N', ':', ' ', ' ', 0 };
-    chain_text[6] = '0' + @divTrunc(player_combat.chain, 10);
-    chain_text[7] = '0' + @mod(player_combat.chain, 10);
-    w4.text(&chain_text, 0, 0);
+    std.sort.sort(usize, to_remove.items, {}, comptime std.sort.desc(usize));
+
+    for (to_remove.items) |remove| {
+        _ = actors.swapRemove(remove);
+    }
+
+    if (debug) {
+        w4.DRAW_COLORS.* = 0x0041;
+        var chain_text: [9:0]u8 = .{ 'C', 'H', 'A', 'I', 'N', ':', ' ', ' ', 0 };
+        chain_text[6] = '0' + @divTrunc(player_combat.chain, 10);
+        chain_text[7] = '0' + @mod(player_combat.chain, 10);
+        w4.text(&chain_text, 0, 0);
+    }
 }
 
 pub fn isSolid(tile: u8) bool {
@@ -300,7 +347,7 @@ pub fn collide(which: usize, rect: geom.Rectf) CollisionInfo {
     const tile_sizef = geom.vec2.itof(world.tile_size);
     var collisions = CollisionInfo.init();
 
-    for (actors) |actor, i| {
+    for (actors.items) |actor, i| {
         if (which == i) continue;
         var o_rect = geom.aabb.as_rectf(geom.aabb.addvf(actor.collisionBox, actor.pos));
         if (geom.rect.overlapsf(rect, o_rect)) {
