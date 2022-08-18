@@ -43,12 +43,12 @@ pub const player_anim_walk_up = [_]Anim.Ops{
 };
 pub const player_anim_stand_side = [_]Anim.Ops{ .{ .Index = 8 }, .Stop };
 pub const player_anim_walk_side = [_]Anim.Ops{
-    .{ .Index = 9 },  .{ .Wait = 5 },
-    .{ .Index = 10 }, .{ .Wait = 5 },
-    .{ .Index = 11 }, .{ .Wait = 5 },
-    .{ .Index = 12 }, .{ .Wait = 5 },
-    .{ .Index = 13 }, .{ .Wait = 5 },
-    .{ .Index = 14 }, .{ .Wait = 5 },
+    .{ .Index = 9 },  .{ .Wait = 8 },
+    .{ .Index = 10 }, .{ .Wait = 8 },
+    .{ .Index = 11 }, .{ .Wait = 8 },
+    .{ .Index = 12 }, .{ .Wait = 8 },
+    .{ .Index = 13 }, .{ .Wait = 8 },
+    .{ .Index = 14 }, .{ .Wait = 8 },
 };
 pub const player_anim_punch_down = [_]Anim.Ops{
     .NoInterrupt,

@@ -23,6 +23,7 @@
             pkgs.butler
             pkgs.binaryen
             upkgs.ldtk
+            pkgs.twiggy
           ];
         };
 
