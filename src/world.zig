@@ -182,10 +182,10 @@ pub const Room = struct {
     /// Location measured in rooms
     coord: [2]i8,
     size: [2]u8,
-    tiles: []u8,
+    tiles: []const u8,
     num: usize = 0,
 
-    pub fn toVec(room: Room) geom.Vec2 {
+    pub fn toArr(room: Room) geom.Vec2 {
         return .{ room.coord[0], room.coord[1] };
     }
 
@@ -198,6 +198,26 @@ pub const Room = struct {
         return .{ pos[0], pos[1], room.size[0], room.size[1] };
     }
 
+    pub fn toID(room: Room) u16 {
+        return @intCast(u16, @bitCast(u8, room.coord[0])) | @intCast(u16, @bitCast(u8, room.coord[1])) << 8;
+    }
+
+    pub fn coordFromID(id: u16) [2]i8 {
+        const x = @bitCast(i8, @intCast(u8, 0x00_FF & id));
+        const y = @bitCast(i8, @intCast(u8, 0xFF_00 & id >> 8));
+        return .{x, y};
+    }
+
+    pub fn compare(ctx: void, a:  Room, b:  Room) bool {
+        _ = ctx;
+        return a.toID() > b.toID();
+    }
+
+    pub fn contains(room: Room, coord: geom.Vec2) bool {
+        const rect = geom.aabb.as_rect(geom.aabb.initv(geom.Vec2{ room.coord[0], room.coord[1] } * room_grid_size, geom.Vec2{ room.size[0], room.size[1] }));
+        return (geom.rect.contains(rect, coord));
+    }
+
     pub fn write(room: Room, writer: anytype) !void {
         try writer.writeInt(i8, room.coord[0], .Little);
         try writer.writeInt(i8, room.coord[1], .Little);
@@ -208,54 +228,47 @@ pub const Room = struct {
         }
     }
 
+    pub fn readHeader(reader: anytype) !Room {
+        const x = try reader.readInt(i8, .Little);
+        const y = try reader.readInt(i8, .Little);
+        const size_x = try reader.readInt(u8, .Little);
+        const size_y = try reader.readInt(u8, .Little);
+        return Room{
+            .coord = .{ x, y },
+            .size = .{ size_x, size_y },
+            .tiles = &[0]u8{},
+        };
+    }
+
     pub fn findAndRead(alloc: std.mem.Allocator, reader: anytype, coord2Find: geom.Vec2) !Room {
         var count: usize = 0;
-        while (count < 255) : (count += 1){
+        while (count < 255) : (count += 1) {
             // If we don't find the room, we crash
-            const x = try reader.readInt(i8, .Little);
-            const y = try reader.readInt(i8, .Little);
-            const size_x = try reader.readInt(u8, .Little);
-            const size_y = try reader.readInt(u8, .Little);
-            const rect = geom.aabb.as_rect(geom.aabb.initv(geom.Vec2{x, y} * room_grid_size, geom.Vec2{size_x, size_y}));
-            const w4 = @import("wasm4.zig");
-            w4.tracef("[findAndRead:%d] (%d,%d) [%d,%d]", count, x, y, size_x, size_y);
-            if (geom.rect.contains(rect, coord2Find)) {
-                w4.tracef("[findAndRead] Room found!");
-                const tile_slice = try alloc.alloc(u8, @intCast(usize, size_x) * @intCast(usize, size_y));
+            var room = readHeader(reader);
+            if (room.contains(coord2Find)) {
+                const tile_slice = try alloc.alloc(u8, @intCast(usize, room.size[0]) * @intCast(usize, room.size[1]));
                 for (tile_slice) |*tile| {
                     tile.* = try reader.readByte();
                 }
-                return Room{
-                    .coord = .{ x, y },
-                    .size = .{size_x, size_y},
-                    .tiles = tile_slice,
-                    .num = count,
-                };
+                room.tiles = tile_slice;
+                return room;
             } else {
-                w4.tracef("[findAndRead] Wrong room, (%d,%d,%d,%d) does not contain (%d,%d). Skipping...", rect[0], rect[1], rect[2], rect[3], coord2Find[0], coord2Find[1]);
                 var i: usize = 0;
-                while (i < @intCast(usize, size_x) * @intCast(usize, size_y)) : (i += 1) {
+                while (i < @intCast(usize, room.size[0]) * @intCast(usize, room.size[1])) : (i += 1) {
                     _ = try reader.readByte();
                 }
-                w4.tracef("[findAndRead] Skip done");
             }
         }
         return error.NoSuchRoom;
     }
 
     pub fn read(alloc: std.mem.Allocator, reader: anytype) !Room {
-        const x = try reader.readInt(i8, .Little);
-        const y = try reader.readInt(i8, .Little);
-        const size_x = try reader.readInt(u8, .Little);
-        const size_y = try reader.readInt(u8, .Little);
-        const tile_slice = try alloc.alloc(u8, @intCast(usize, size_x) * @intCast(usize, size_y));
+        var room = readHeader(reader);
+        const tile_slice = try alloc.alloc(u8, @intCast(usize, room.size[0]) * @intCast(usize, room.size[1]));
         for (tile_slice) |*tile| {
             tile.* = try reader.readByte();
         }
-        return Room{
-            .coord = .{ x, y },
-            .size = .{size_x, size_y},
-            .tiles = tile_slice,
-        };
+        room.tiles = tile_slice;
+        return room;
     }
 };

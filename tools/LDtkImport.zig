@@ -80,7 +80,7 @@ fn make(step: *std.build.Step) !void {
     const writer = data.writer();
 
     var player_count: usize = 0;
-    try writer.writeInt(u16, @intCast(u8, entities.items.len), .Little);
+    try writer.writeInt(u16, @intCast(u16, entities.items.len), .Little);
     for (entities.items) |entity| {
         if (entity.kind == .Player) player_count += 1;
         try entity.write(writer);
@@ -127,10 +127,11 @@ fn parseLevel(opt: struct {
     const size_x: u8 = @intCast(u8, size_x_usize);
     const size_y: u8 = @intCast(u8, size_y_usize);
 
+    var tiles = try allocator.alloc(u8, size_x_usize * size_y_usize);
     const room = world.Room{
         .coord = .{ world_x, world_y },
         .size = .{ size_x, size_y },
-        .tiles = try allocator.alloc(u8, size_x_usize * size_y_usize),
+        .tiles = tiles,
     };
 
     var cliff_layer: ?LDtk.LayerInstance = null;
@@ -184,8 +185,8 @@ fn parseLevel(opt: struct {
     const width = @intCast(u16, cliff.__cWid);
     std.debug.assert(width == room.size[0]);
 
-    for (room.tiles) |_, i| {
-        room.tiles[i] = 0;
+    for (tiles) |_, i| {
+        tiles[i] = 0;
     }
 
     // Add unchanged tile data
@@ -194,7 +195,7 @@ fn parseLevel(opt: struct {
         const y = @divExact(autotile.px[1], environment.__gridSize);
         const i = @intCast(usize, x + y * width);
         const t = @intCast(u8, autotile.t);
-        room.tiles[i] = t;
+        tiles[i] = t;
     }
 
     // Add cliff tiles
@@ -203,7 +204,7 @@ fn parseLevel(opt: struct {
         const y = @divExact(autotile.px[1], cliff.__gridSize);
         const i = @intCast(usize, x + y * width);
         const t = @intCast(u8, autotile.t);
-        room.tiles[i] = t;
+        tiles[i] = t;
     }
 
     return room;

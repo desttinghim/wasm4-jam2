@@ -6,7 +6,7 @@ const input = @import("input.zig");
 const world = @import("world.zig");
 const Anim = @import("Anim.zig");
 
-const world_data = @embedFile(@import("world_data").path);
+const Database = @import("database.zig");
 
 const builtin = @import("builtin");
 // const debug = builtin.mode == .Debug;
@@ -116,6 +116,8 @@ var actors: std.ArrayList(Actor) = undefined;
 const AnimStore = struct { owns: usize, anim: Anim };
 var animators: []AnimStore = undefined;
 
+var db: Database = undefined;
+
 fn Assoc(comptime T: type) type {
     return struct { key: usize, val: T };
 }
@@ -130,6 +132,9 @@ export fn start() void {
         w4.tracef(@errorName(e));
         @panic("Ran into an error! ");
     };
+}
+
+fn start_safe() !void {
     // https://lospec.com/palette-list/crimson
     // CRIMSON
     // by WilLeoKnight
@@ -150,45 +155,39 @@ export fn start() void {
     // w4.PALETTE.* = .{ 0xe0f8cf, 0x86c06c, 0x306850, 0x071821 };
 
     w4.PALETTE.* = .{ 0xe0f8cf, 0x86c06c, 0x644666, 0x100221 };
-}
 
-fn start_safe() !void {
-    const Cursor = std.io.FixedBufferStream([]const u8);
-    var cursor = Cursor{
-        .pos = 0,
-        .buffer = world_data,
-    };
+    db = try Database.init(long_alloc);
 
-    if (debug) w4.tracef("%d", world_data.len);
+    var spawn: world.Entity = db.getSpawn() orelse return error.PlayerNotFound;
+    room = db.getRoomContaining(spawn.toVec()) orelse return error.RoomNotFound;
 
-    var reader = cursor.reader();
+    const entities = db.getRoomEntities(room) orelse return error.NoRoomEntities;
+    actors = try std.ArrayList(Actor).initCapacity(long_alloc, entities.len);
 
-    var spawn: ?geom.Vec2 = null;
+    // Create player
     {
-        const entity_count = try reader.readInt(u16, .Little);
-        actors = try std.ArrayList(Actor).initCapacity(long_alloc, entity_count);
-        var player_count: usize = 0;
-        var needs_animator: usize = 0;
-        var i: usize = 0;
-        while (i < entity_count) : (i += 1) {
-            const entity = try world.Entity.read(reader);
-            const tile_sizef = geom.vec2.itof(world.tile_size);
-            const pos = entity.toPos() + (tile_sizef / @splat(2, @as(f32, 2)));
-            if (entity.kind == .Player) {
-                spawn = entity.toVec();
-                needs_animator += 1;
-                try actors.append(Actor{
-                    .kind = entity.kind,
-                    .pos = pos,
-                    .last_pos = pos,
-                    .collisionBox = geom.AABBf{ -4, -4, 8, 8 },
-                    .offset = geom.Vec2f{ -8, -12 },
-                    .image = player_blit,
-                });
-                playerIndex = i;
-                if (debug) w4.tracef("[start] playerIndex %d", i);
-                player_count += 1;
-            } else {
+        const tile_sizef = geom.vec2.itof(world.tile_size);
+        const pos = spawn.toPos() + (tile_sizef / @splat(2, @as(f32, 2)));
+        try actors.append(Actor{
+            .kind = spawn.kind,
+            .pos = pos,
+            .last_pos = pos,
+            .collisionBox = geom.AABBf{ -4, -4, 8, 8 },
+            .offset = geom.Vec2f{ -8, -12 },
+            .image = player_blit,
+        });
+    }
+
+    // Declare animator component count (player is implicitly counted)
+    var needs_animator: usize = 1;
+
+    // Load other entities
+    for (entities) |entity| {
+        const tile_sizef = geom.vec2.itof(world.tile_size);
+        const pos = entity.toPos() + (tile_sizef / @splat(2, @as(f32, 2)));
+        switch (entity.kind) {
+            .Player => {},
+            .Pot => {
                 try actors.append(Actor{
                     .kind = entity.kind,
                     .pos = pos,
@@ -197,37 +196,25 @@ fn start_safe() !void {
                     .offset = geom.Vec2f{ -8, -12 },
                     .image = draw.Blit.init_frame(0x0234, &world.bitmap, .{ .bpp = .b2 }, .{ 16, 16 }, world.pot),
                 });
-            }
-        }
-        if (debug and player_count == 0) w4.tracef("[start] NO PLAYER FOUND");
-
-        if (playerIndex != 0) {
-            std.mem.swap(Actor, &actors.items[playerIndex], &actors.items[0]);
-            playerIndex = 0;
-            if (debug) w4.tracef("[start] playerIndex swapped to %d", playerIndex);
-        } else {
-            if (debug) w4.tracef("[start] playerIndex already 0");
-        }
-
-        if (debug) w4.tracef("[start] Anim count %d", needs_animator);
-        // Add animator components
-        animators = try long_alloc.alloc(AnimStore, needs_animator);
-        var idx: usize = 0;
-        for (actors.items) |actor, a| {
-            if (actor.kind == .Player) {
-                animators[idx] = .{ .owns = idx, .anim = .{
-                    .anim = &world.player_anim_walk_down,
-                } };
-                player_combat.animator = &animators[idx].anim;
-                player_combat.actor = &actors.items[a];
-                idx += 1;
-            }
+            },
         }
     }
-    {
-        const room_count = try reader.readInt(u8, .Little);
-        room = try world.Room.findAndRead(long_alloc, reader, spawn.?);
-        if (debug) w4.tracef("[start] Loading %d/%d: (%d,%d) [%d,%d]", room.num, room_count, room.coord[0], room.coord[1], room.size[0], room.size[1]);
+
+    // Allocate animators
+    animators = try long_alloc.alloc(AnimStore, needs_animator);
+
+    if (debug) w4.tracef("[start] Anim count %d", needs_animator);
+    // Add animator components
+    var idx: usize = 0;
+    for (actors.items) |actor, a| {
+        if (actor.kind == .Player) {
+            animators[idx] = .{ .owns = idx, .anim = .{
+                .anim = &world.player_anim_walk_down,
+            } };
+            player_combat.animator = &animators[idx].anim;
+            player_combat.actor = &actors.items[a];
+            idx += 1;
+        }
     }
 }
 
