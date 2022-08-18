@@ -130,6 +130,26 @@ export fn start() void {
         w4.tracef(@errorName(e));
         @panic("Ran into an error! ");
     };
+    // https://lospec.com/palette-list/crimson
+    // CRIMSON
+    // by WilLeoKnight
+    // w4.PALETTE.* = .{ 0xeff9d6, 0xba5044, 0x7a1c4b, 0x1b0326 };
+
+    // https://lospec.com/palette-list/space-icecream
+    // SPACE ICECREAM
+    // by Rexsarus
+    // w4.PALETTE.* = .{ 0xfffed6, 0xffabab, 0x644666, 0x100221 };
+
+    // https://lospec.com/palette-list/space-icecream
+    // Kirokaze GB
+    // by Kirokaze
+    // w4.PALETTE.* = .{ 0xe2f3e4, 0x94e344, 0x46878f, 0x332c50 };
+
+    // Default
+    // WASM-4
+    // w4.PALETTE.* = .{ 0xe0f8cf, 0x86c06c, 0x306850, 0x071821 };
+
+    w4.PALETTE.* = .{ 0xe0f8cf, 0x86c06c, 0x644666, 0x100221 };
 }
 
 fn start_safe() !void {
@@ -344,7 +364,7 @@ fn update_safe() !void {
         try draw_order.append(actor);
     }
 
-    std.sort.sort(*Actor, draw_order.items, {}, Actor.compare);
+    std.sort.insertionSort(*Actor, draw_order.items, {}, Actor.compare);
     for (draw_order.items) |actor| {
         const pos = geom.vec2.ftoi(actor.pos + actor.offset) - camera_pos;
         actor.image.blit(pos);
@@ -369,7 +389,7 @@ fn update_safe() !void {
         }
     }
 
-    std.sort.sort(usize, to_remove.items, {}, comptime std.sort.desc(usize));
+    std.sort.insertionSort(usize, to_remove.items, {}, comptime std.sort.desc(usize));
 
     // Remove destroyed items
     for (to_remove.items) |remove| {

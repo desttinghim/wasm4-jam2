@@ -234,9 +234,10 @@ pub const Room = struct {
             } else {
                 w4.tracef("[findAndRead] Wrong room, (%d,%d,%d,%d) does not contain (%d,%d). Skipping...", rect[0], rect[1], rect[2], rect[3], coord2Find[0], coord2Find[1]);
                 var i: usize = 0;
-                while (i < size_x * size_y) : (i += 1) {
+                while (i < @intCast(usize, size_x) * @intCast(usize, size_y)) : (i += 1) {
                     _ = try reader.readByte();
                 }
+                w4.tracef("[findAndRead] Skip done");
             }
         }
         return error.NoSuchRoom;
