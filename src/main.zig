@@ -379,7 +379,7 @@ fn update_safe() !void {
     var to_remove = std.ArrayList(usize).init(alloc);
     defer to_remove.deinit();
 
-    // Remove actors
+    // Resolve hitbox/hurtbox collisions
     for (actors.items) |*actor, actorIdx| {
         for (hurtboxes.items) |box| {
             if (box.key == actorIdx) continue;
@@ -389,7 +389,7 @@ fn update_safe() !void {
         }
     }
 
-    std.sort.insertionSort(usize, to_remove.items, {}, comptime std.sort.desc(usize));
+    std.mem.reverse(usize, to_remove.items);
 
     // Remove destroyed items
     for (to_remove.items) |remove| {
