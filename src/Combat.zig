@@ -33,24 +33,23 @@ pub fn endAttack(this: *Combat) void {
 }
 
 /// Relative to offset
-pub fn getHurtbox(this: Combat) ?geom.Rectf {
+pub fn getHurtbox(this: Combat) ?geom.AABBf {
     if (!this.is_attacking and this.animator.interruptable) return null;
     // This will be called after startAttack, so last_attack == 0 is flipped
-    if (this.last_attack == 0) {
-        return switch (this.actor.facing) {
-            .Northwest, .Northeast, .North => .{ -4, -20, 13, 10 },
-            .West => .{ -16, -10, 12, 10 },
-            .East => .{ 4, -10, 12, 10 },
-            .Southwest, .Southeast, .South => .{ -4, 0, 12, 12 },
-        };
-    } else {
-        return switch (this.actor.facing) {
-            .Northwest, .Northeast, .North => .{ -7, -20, 13, 10 },
-            .West => .{ -16, -10, 12, 10 },
-            .East => .{ 4, -10, 12, 10 },
-            .Southwest, .Southeast, .South => .{ -8, 0, 12, 12 },
-        };
-    }
+    var offset = this.actor.facing.getVec2f() * @splat(2, @as(f32, 8));
+    const chain_offset_x: f32 = x: {
+        if (offset[1] > 0.01 or offset[1] < 0.01) {
+            break :x if (this.last_attack == 0) @as(f32, -4) else -8;
+        } else {
+            break :x 0;
+        }
+    };
+    offset[0] += chain_offset_x;
+    const hurtbox: geom.AABBf = switch (this.actor.facing) {
+        .Northwest, .Northeast, .North, .Southwest, .Southeast, .South => .{ 0, -8, 14, 12 },
+        .West, .East => .{ -4, -10, 12, 14 },
+    };
+    return geom.aabb.addvf(hurtbox, offset);
 }
 
 pub fn startAttack(this: *Combat, now: usize) void {

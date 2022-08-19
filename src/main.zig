@@ -401,7 +401,7 @@ fn update_safe() !void {
     }
 
     if (player_combat.getHurtbox()) |hurtbox| {
-        try hurtboxes.append(.{ .key = playerIndex, .val = geom.rect.shiftf(hurtbox, actors.items[playerIndex].pos) });
+        try hurtboxes.append(.{ .key = playerIndex, .val = geom.aabb.as_rectf(geom.aabb.addvf(hurtbox, actors.items[playerIndex].pos)) });
     }
 
     for (collectables) |*collectable| {
