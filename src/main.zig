@@ -57,6 +57,7 @@ var player_combat = Combat{
     .punch_side = .{ &world.player_anim_punch_side, &world.player_anim_punch_side2 },
 };
 var camera = geom.Vec2f{ 0, 0 };
+var camera_player_pos = geom.Vec2f{0, 0};
 var playerStore: Actor = undefined;
 
 var actors: std.ArrayList(Actor) = undefined;
@@ -188,6 +189,16 @@ fn loadRoom() !void {
             health_idx += 1;
         }
     }
+
+    // Update camera
+    const bounds = geom.aabb.as_rectf(geom.aabb.itof(room.toAABB() * @splat(4, world.tile_size[0])));
+    var new_camera = actors.items[playerIndex].pos - geom.Vec2f{ 80, 80 };
+    if (new_camera[0] < bounds[0]) new_camera[0] = bounds[0];
+    if (new_camera[1] < bounds[1]) new_camera[1] = bounds[1];
+    if (new_camera[0] + 160 > bounds[2]) new_camera[0] = bounds[2] - 160;
+    if (new_camera[1] + 160 > bounds[3]) new_camera[1] = bounds[3] - 160;
+    camera = new_camera;
+    camera_player_pos = new_camera;
 }
 
 export fn update() void {
@@ -222,7 +233,7 @@ fn update_safe() !void {
         // Input
         var player = &actors.items[playerIndex];
         player.motive = false;
-        const speed: f32 = 40.0 / 60.0;
+        const speed: f32 = 30.0 / 60.0;
         var input_vector = geom.Vec2f{ 0, 0 };
 
         if (input.btn(.one, .up)) input_vector += geom.Vec2f{ 0, -1 };
@@ -253,12 +264,28 @@ fn update_safe() !void {
 
         {
             // Camera
-            camera = player.pos - geom.Vec2f{ 80, 80 };
             const bounds = geom.aabb.as_rectf(geom.aabb.itof(room.toAABB() * @splat(4, world.tile_size[0])));
-            if (camera[0] < bounds[0]) camera[0] = bounds[0];
-            if (camera[1] < bounds[1]) camera[1] = bounds[1];
-            if (camera[0] + 160 > bounds[2]) camera[0] = bounds[2] - 160;
-            if (camera[1] + 160 > bounds[3]) camera[1] = bounds[3] - 160;
+            const centered_camera = player.pos - geom.Vec2f{ 80, 80 };
+            var move_dist = geom.vec2.distf(player.pos, camera_player_pos);
+            const scale = @minimum(1.0, move_dist / 40);
+            const ideal_camera = centered_camera + (player.facing.getVec2f() * geom.Vec2f{ 40, 40 });
+            var scaled_camera = centered_camera + (player.facing.getVec2f() * geom.Vec2f{ 40, 40 } * @splat(2, scale));
+
+            if (scaled_camera[0] < bounds[0]) scaled_camera[0] = bounds[0];
+            if (scaled_camera[1] < bounds[1]) scaled_camera[1] = bounds[1];
+            if (scaled_camera[0] + 160 > bounds[2]) scaled_camera[0] = bounds[2] - 160;
+            if (scaled_camera[1] + 160 > bounds[3]) scaled_camera[1] = bounds[3] - 160;
+
+            const camera_to_ideal = geom.vec2.distf(camera, ideal_camera);
+            const scaled_to_ideal = geom.vec2.distf(scaled_camera, ideal_camera);
+            const centered_to_scaled = geom.vec2.distf(centered_camera, scaled_camera);
+            const centered_to_camera = geom.vec2.distf(centered_camera, camera);
+            if (centered_to_camera < centered_to_scaled or scaled_to_ideal < camera_to_ideal) {
+                camera = geom.vec2.lerp(camera, scaled_camera, 0.1);
+            }
+            if (!(player.motive and player.isMoving())) {
+                camera_player_pos = player.pos;
+            }
 
             const size = geom.aabb.sizef(player.collisionBox);
             const left = (player.pos[0] < bounds[0] + size[0]);

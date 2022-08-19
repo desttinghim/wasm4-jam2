@@ -1,5 +1,19 @@
 const std = @import("std");
 
+pub const interpolate = struct {
+    /// Imprecise lerp. Does not guarantee v = v1 when t = 1
+    /// Monotonic
+    pub fn lerp(v0: f32, v1: f32, t: f32) f32 {
+        return v0 + t * (v1 - v0);
+    }
+
+    /// Precise lerp. Guarantees v = v1 when t = 1. Monotonic only when v0 * v1 < 0
+    /// Lerping between the same values may not produce the same value
+    pub fn lerpPrecise(v0: f32, v1: f32, t: f32) f32 {
+        return (1 - t) * v0 + t * v1;
+    }
+};
+
 /// Represents a 2D floating point Vector as .{ x, y }
 pub const Vec2f = @Vector(2, f32);
 /// Represents a 2D signed Vector as .{ x, y }
@@ -158,6 +172,11 @@ pub const vec2 = struct {
     /// Returns the negative dot product
     pub fn ndot(a: Vec2f, b: Vec2f) f32 {
         return a[0] * b[0] - a[1] * b[1];
+    }
+
+    /// Linear interpolation
+    pub fn lerp(v0: Vec2f, v1: Vec2f, t: f32) Vec2f {
+        return v0 + @splat(2, t) * (v1 - v0);
     }
 };
 
