@@ -35,6 +35,7 @@ const frame_alloc: [2]std.mem.Allocator = .{
 const Actor = @import("Actor.zig");
 const Renderable = @import("Renderable.zig");
 const Combat = @import("Combat.zig");
+const Health = struct { max: u8, current: u8 };
 
 const player_blit = draw.Blit.init_frame(world.player_style, &world.player_bmp, .{ .bpp = .b2 }, .{ 16, 16 }, 0);
 const player_offset = geom.Vec2f{ -8, -12 };
@@ -55,8 +56,8 @@ var playerStore: Actor = undefined;
 
 var actors: std.ArrayList(Actor) = undefined;
 var collectables: [][2]geom.Vec2f = &.{};
-const AnimStore = struct { owns: usize, anim: Anim };
-var animators: []AnimStore = undefined;
+var animators: []Assoc(Anim) = undefined;
+var health: []Assoc(Health) = undefined;
 
 var db: Database = undefined;
 
@@ -133,6 +134,8 @@ fn loadRoom() !void {
 
     // Declare animator component count (player is implicitly counted)
     var needs_animator: usize = 1;
+    // TODO: give player a health stat
+    var needs_health: usize = 0;
 
     // Load other entities
     for (entities) |entity| {
@@ -141,6 +144,7 @@ fn loadRoom() !void {
         switch (entity.kind) {
             .Player => {},
             .Pot => {
+                needs_health += 1;
                 try actors.append(Actor{
                     .kind = entity.kind,
                     .pos = pos,
@@ -154,19 +158,28 @@ fn loadRoom() !void {
     }
 
     // Allocate animators
-    animators = try level_alloc.alloc(AnimStore, needs_animator);
+    animators = try level_alloc.alloc(Assoc(Anim), needs_animator);
+    health = try level_alloc.alloc(Assoc(Health), needs_health);
 
     if (debug) w4.tracef("[start] Anim count %d", needs_animator);
     // Add animator components
-    var idx: usize = 0;
+    var anim_idx: usize = 0;
+    var health_idx: usize = 0;
     for (actors.items) |actor, a| {
         if (actor.kind == .Player) {
-            animators[idx] = .{ .owns = idx, .anim = .{
+            animators[anim_idx] = .{ .key = anim_idx, .val = .{
                 .anim = &world.player_anim_walk_down,
             } };
-            player_combat.animator = &animators[idx].anim;
+            player_combat.animator = &animators[anim_idx].val;
             player_combat.actor = &actors.items[a];
-            idx += 1;
+            anim_idx += 1;
+        }
+        if (actor.kind == .Pot) {
+            health[health_idx] = .{ .key = health_idx, .val = .{
+                .max = 2,
+                .current = 2,
+            } };
+            health_idx += 1;
         }
     }
 }
@@ -190,8 +203,11 @@ fn update_safe() !void {
     const alloc = frame_alloc[which_alloc];
     defer frame_fba[(time + 1) % 2].reset();
 
-    var hurtboxes = std.ArrayList(Assoc(geom.Rectf)).init(alloc);
+    var hurtboxes = try std.ArrayList(Assoc(geom.Rectf)).initCapacity(alloc, 10);
     defer hurtboxes.deinit();
+
+    var hitboxes = try std.ArrayList(Assoc(geom.Rectf)).initCapacity(alloc, 10);
+    defer hitboxes.deinit();
 
     var next_room: ?world.Room = null;
 
@@ -351,6 +367,12 @@ fn update_safe() !void {
             },
             .Static => {},
         }
+        switch (actor.kind) {
+            .Pot => {
+                try hitboxes.append(.{ .key = actorIndex, .val = actor.getRect() });
+            },
+            .Player => {},
+        }
 
         // Kinematics
         const velocity = (actor.pos - actor.last_pos) * @splat(2, @as(f32, actor.friction));
@@ -378,9 +400,9 @@ fn update_safe() !void {
     }
 
     // Animate!
-    for (animators) |*store| {
-        var actor = &actors.items[store.owns];
-        store.anim.update(&actor.image.frame, &actor.image.flags);
+    for (animators) |*anim| {
+        var actor = &actors.items[anim.key];
+        anim.val.update(&actor.image.frame, &actor.image.flags);
     }
 
     // Sort all entities by y
@@ -421,12 +443,19 @@ fn update_safe() !void {
     defer to_remove.deinit();
 
     // Resolve hitbox/hurtbox collisions
-    for (actors.items) |*actor, actorIdx| {
-        for (hurtboxes.items) |box| {
-            if (box.key == actorIdx) continue;
-            if (geom.rect.overlapsf(box.val, actor.getRect())) {
-                // try to_remove.append(actorIdx);
-                const add = geom.rect.centerf(actor.getRect()) - geom.rect.centerf(box.val);
+    for (hitboxes.items) |hitbox| {
+        for (hurtboxes.items) |hurtbox| {
+            if (hurtbox.key == hitbox.key) continue;
+            if (geom.rect.overlapsf(hurtbox.val, hitbox.val)) {
+                for (health) |*h| {
+                    if (h.key != hitbox.key) continue;
+                    h.val.current -|= 1;
+                    if (h.val.current == 0) {
+                        try to_remove.append(h.key);
+                    }
+                }
+                const actor = &actors.items[hitbox.key];
+                const add = geom.rect.centerf(actor.getRect()) - geom.rect.centerf(hitbox.val);
                 actor.pos += add / @splat(2, @as(f32, 2));
             }
         }
@@ -442,7 +471,7 @@ fn update_safe() !void {
         if (debug) w4.tracef("[remove] %d of %d", remove, actors.items.len);
         const actor = actors.swapRemove(remove);
         // Add their position to collectables
-        new_collectables[collectCount] = .{actor.pos, actor.last_pos};
+        new_collectables[collectCount] = .{ actor.pos, actor.last_pos };
         collectCount += 1;
     }
 
@@ -504,7 +533,7 @@ pub fn collide(which: usize, rect: geom.Rectf) CollisionInfo {
         if (which == i) continue;
         var o_rect = geom.aabb.as_rectf(geom.aabb.addvf(actor.collisionBox, actor.pos));
         if (geom.rect.overlapsf(rect, o_rect)) {
-            collisions.append(actor.collisionBox, .{.body = i});
+            collisions.append(actor.collisionBox, .{ .body = i });
             if (debug) w4.tracef("collision! %d", i);
         }
     }
@@ -540,7 +569,7 @@ pub const CollisionInfo = struct {
     items: [9]geom.AABBf,
     which: [9]BodyInfo,
 
-    const BodyInfo = union(enum) {static, body: usize};
+    const BodyInfo = union(enum) { static, body: usize };
 
     pub fn init() CollisionInfo {
         return CollisionInfo{
