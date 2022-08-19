@@ -28,6 +28,8 @@ pub fn endAttack(this: *Combat) void {
     this.actor.image.flags.flip_x = this.actor.facing == .Left;
     // Arrest momentum
     this.actor.last_pos = this.actor.pos;
+    this.actor.friction = 0.5;
+    this.actor.body = .Kinematic;
 }
 
 /// Relative to offset
@@ -71,4 +73,6 @@ pub fn startAttack(this: *Combat, now: usize) void {
     this.is_attacking = true;
     this.last_attacking = now;
     this.last_attack = (this.last_attack + 1) % 2;
+    this.actor.friction = 0.9;
+    this.actor.body = .Rigid;
 }

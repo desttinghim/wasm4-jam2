@@ -111,6 +111,8 @@ fn start_safe() !void {
             .kind = spawn.kind,
             .pos = pos,
             .last_pos = pos,
+            .body = .Kinematic,
+            .friction = 0.5,
             .collisionBox = geom.AABBf{ -4, -4, 8, 8 },
             .offset = geom.Vec2f{ -8, -12 },
             .image = player_blit,
@@ -223,25 +225,25 @@ fn update_safe() !void {
             if (player.motive and player_combat.is_attacking) player_combat.endAttack();
             if (input.btnp(.one, .z)) player_combat.startAttack(time);
         } else if (!player_combat.animator.interruptable) {
-            player.pos += player.facing.getVec2f() * @splat(2, speed * 1.25);
+            player.pos += player.facing.getVec2f() * @splat(2, speed);
             try hurtboxes.append(.{ .key = playerIndex, .val = geom.rect.shiftf(player_combat.getHurtbox(), player.pos) });
         } else {
             if (input.btnp(.one, .z)) player_combat.startAttack(time);
             if (time - player_combat.last_attacking > 45) player_combat.endAttack();
         }
 
-        // Collision
-        const as_rectf = geom.aabb.as_rectf;
-        const addvf = geom.aabb.addvf;
-        const hcols = collide(playerIndex, as_rectf(addvf(player.collisionBox, geom.Vec2f{ player.pos[0], player.last_pos[1] })));
-        const vcols = collide(playerIndex, as_rectf(addvf(player.collisionBox, geom.Vec2f{ player.last_pos[0], player.pos[1] })));
-        if (hcols.len > 0) player.pos[0] = player.last_pos[0];
-        if (vcols.len > 0) player.pos[1] = player.last_pos[1];
+        // // Collision
+        // const as_rectf = geom.aabb.as_rectf;
+        // const addvf = geom.aabb.addvf;
+        // const hcols = collide(playerIndex, as_rectf(addvf(player.collisionBox, geom.Vec2f{ player.pos[0], player.last_pos[1] })));
+        // const vcols = collide(playerIndex, as_rectf(addvf(player.collisionBox, geom.Vec2f{ player.last_pos[0], player.pos[1] })));
+        // if (hcols.len > 0) player.pos[0] = player.last_pos[0];
+        // if (vcols.len > 0) player.pos[1] = player.last_pos[1];
 
-        // Kinematics
-        const velocity = (player.pos - player.last_pos) * @splat(2, @as(f32, 0.5));
-        player.last_pos = player.pos;
-        player.pos += velocity;
+        // // Kinematics
+        // const velocity = (player.pos - player.last_pos) * @splat(2, @as(f32, 0.5));
+        // player.last_pos = player.pos;
+        // player.pos += velocity;
 
         {
             camera = player.pos - geom.Vec2f{ 80, 80 };
@@ -303,6 +305,57 @@ fn update_safe() !void {
                 }
             }
         }
+    }
+
+    for (actors.items) |*actor, actorIndex| {
+        const as_rectf = geom.aabb.as_rectf;
+        const addvf = geom.aabb.addvf;
+        const hcols = collide(actorIndex, as_rectf(addvf(actor.collisionBox, geom.Vec2f{ actor.pos[0], actor.last_pos[1] })));
+        const vcols = collide(actorIndex, as_rectf(addvf(actor.collisionBox, geom.Vec2f{ actor.last_pos[0], actor.pos[1] })));
+        switch (actor.body) {
+            .Rigid => {
+                // TODO: make them bounce
+                var velocity = (actor.pos - actor.last_pos) * @splat(2, @as(f32, actor.friction));
+                for (hcols.items) |_, i| {
+                    if (hcols.which[i] != .body) continue;
+                    const other = &actors.items[hcols.which[i].body];
+                    if (other.body == .Rigid) {
+                        velocity /= @splat(2, @as(f32, 2));
+                        other.pos += velocity;
+                    }
+                }
+                for (vcols.items) |_, i| {
+                    if (vcols.which[i] != .body) continue;
+                    const other = &actors.items[vcols.which[i].body];
+                    if (other.body == .Rigid) {
+                        velocity /= @splat(2, @as(f32, 2));
+                        other.pos += velocity;
+                    }
+                }
+                actor.pos = actor.last_pos + velocity;
+            },
+            .Kinematic, .Static => {},
+        }
+    }
+
+    for (actors.items) |*actor, actorIndex| {
+        // Collision
+        const as_rectf = geom.aabb.as_rectf;
+        const addvf = geom.aabb.addvf;
+        const hcols = collide(actorIndex, as_rectf(addvf(actor.collisionBox, geom.Vec2f{ actor.pos[0], actor.last_pos[1] })));
+        const vcols = collide(actorIndex, as_rectf(addvf(actor.collisionBox, geom.Vec2f{ actor.last_pos[0], actor.pos[1] })));
+        switch (actor.body) {
+            .Rigid, .Kinematic => {
+                if (hcols.len > 0) actor.pos[0] = actor.last_pos[0];
+                if (vcols.len > 0) actor.pos[1] = actor.last_pos[1];
+            },
+            .Static => {},
+        }
+
+        // Kinematics
+        const velocity = (actor.pos - actor.last_pos) * @splat(2, @as(f32, actor.friction));
+        actor.last_pos = actor.pos;
+        actor.pos += velocity;
     }
 
     for (collectables) |*collectable| {
@@ -372,7 +425,7 @@ fn update_safe() !void {
         for (hurtboxes.items) |box| {
             if (box.key == actorIdx) continue;
             if (geom.rect.overlapsf(box.val, actor.getRect())) {
-                try to_remove.append(actorIdx);
+                // try to_remove.append(actorIdx);
                 const add = geom.rect.centerf(actor.getRect()) - geom.rect.centerf(box.val);
                 actor.pos += add / @splat(2, @as(f32, 2));
             }
@@ -451,7 +504,7 @@ pub fn collide(which: usize, rect: geom.Rectf) CollisionInfo {
         if (which == i) continue;
         var o_rect = geom.aabb.as_rectf(geom.aabb.addvf(actor.collisionBox, actor.pos));
         if (geom.rect.overlapsf(rect, o_rect)) {
-            collisions.append(actor.collisionBox);
+            collisions.append(actor.collisionBox, .{.body = i});
             if (debug) w4.tracef("collision! %d", i);
         }
     }
@@ -474,7 +527,7 @@ pub fn collide(which: usize, rect: geom.Rectf) CollisionInfo {
             const tilepos = geom.vec2.itof(geom.Vec2{ i, a } * world.tile_size);
 
             if (isSolid(tile)) {
-                collisions.append(geom.aabb.initvf(tilepos, tile_sizef));
+                collisions.append(geom.aabb.initvf(tilepos, tile_sizef), .static);
             }
         }
     }
@@ -485,17 +538,22 @@ pub fn collide(which: usize, rect: geom.Rectf) CollisionInfo {
 pub const CollisionInfo = struct {
     len: usize,
     items: [9]geom.AABBf,
+    which: [9]BodyInfo,
+
+    const BodyInfo = union(enum) {static, body: usize};
 
     pub fn init() CollisionInfo {
         return CollisionInfo{
             .len = 0,
             .items = undefined,
+            .which = undefined,
         };
     }
 
-    pub fn append(col: *CollisionInfo, item: geom.AABBf) void {
+    pub fn append(col: *CollisionInfo, item: geom.AABBf, body: BodyInfo) void {
         std.debug.assert(col.len < 9);
         col.items[col.len] = item;
+        col.which[col.len] = body;
         col.len += 1;
     }
 };

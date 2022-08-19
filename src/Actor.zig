@@ -3,6 +3,7 @@ const geom = @import("geom.zig");
 const world = @import("world.zig");
 
 const Actor = @This();
+pub const Body = enum { Kinematic, Rigid, Static };
 
 kind: world.EntityKind,
 image: draw.Blit,
@@ -11,6 +12,8 @@ offset: geom.Vec2f,
 pos: geom.Vec2f,
 last_pos: geom.Vec2f,
 collisionBox: geom.AABBf,
+friction: f32 = 0.9,
+body: Body = .Rigid,
 facing: geom.Direction = .Left,
 
 // True if actor is attempting to move
