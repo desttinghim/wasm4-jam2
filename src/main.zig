@@ -35,7 +35,12 @@ const frame_alloc: [2]std.mem.Allocator = .{
 const Actor = @import("Actor.zig");
 const Renderable = @import("Renderable.zig");
 const Combat = @import("Combat.zig");
-const Health = struct { max: u8, current: u8 };
+const Health = struct {
+    max: u8,
+    current: u8,
+    stunned: ?usize = null,
+    stunTime: usize = 20,
+};
 
 const player_blit = draw.Blit.init_frame(world.player_style, &world.player_bmp, .{ .bpp = .b2 }, .{ 16, 16 }, 0);
 const player_offset = geom.Vec2f{ -8, -12 };
@@ -178,6 +183,7 @@ fn loadRoom() !void {
             health[health_idx] = .{ .key = health_idx, .val = .{
                 .max = 2,
                 .current = 2,
+                .stunTime = 60,
             } };
             health_idx += 1;
         }
@@ -409,7 +415,18 @@ fn update_safe() !void {
     var draw_order = try std.ArrayList(Renderable).initCapacity(alloc, actors.items.len + collectables.len);
     defer draw_order.deinit();
 
-    for (actors.items) |*actor| {
+    addRenderableActor: for (actors.items) |*actor, idx| {
+        for (health) |*h| {
+            if (h.key != idx) continue;
+            if (h.val.stunned) |startTime| {
+                if (time - startTime > h.val.stunTime) {
+                    h.val.stunned = null;
+                }
+                if (time % 30 < 10){
+                    continue :addRenderableActor;
+                }
+            }
+        }
         try draw_order.append(Renderable{ .kind = .{ .Actor = actor } });
     }
 
@@ -449,7 +466,10 @@ fn update_safe() !void {
             if (geom.rect.overlapsf(hurtbox.val, hitbox.val)) {
                 for (health) |*h| {
                     if (h.key != hitbox.key) continue;
+                    if (h.val.stunned) |_| break; {
+                    }
                     h.val.current -|= 1;
+                    h.val.stunned = time;
                     if (h.val.current == 0) {
                         try to_remove.append(h.key);
                     }
