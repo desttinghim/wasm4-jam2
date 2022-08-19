@@ -384,6 +384,14 @@ pub const rect = struct {
     /////////////////////////////////////
     // f32 float backed rect functions //
     /////////////////////////////////////
+    pub fn as_aabbf(rectangle: Rectf) AABBf {
+        return AABBf{
+            rectangle[0],
+            rectangle[1],
+            rectangle[2] - rectangle[0],
+            rectangle[3] - rectangle[1],
+        };
+    }
 
     pub fn initvf(v1: Vec2f, v2: Vec2f) Rectf {
         return .{ v1[0], v1[1], v2[0], v2[1] };
@@ -516,10 +524,14 @@ pub const aabb = struct {
     }
 
     pub fn subvf(box: AABBf, v2: Vec2f) AABBf {
-        return initv(pos(box) - v2, size(box));
+        return initvf(posf(box) - v2, sizef(box));
     }
 
     pub fn itof(r: Rect) Rectf {
         return Rectf{ @intToFloat(f32, r[0]), @intToFloat(f32, r[1]), @intToFloat(f32, r[2]), @intToFloat(f32, r[3]) };
+    }
+
+    pub fn ftoi(r: Rectf) Rect {
+        return Rect{ @floatToInt(i32, r[0]), @floatToInt(i32, r[1]), @floatToInt(i32, r[2]), @floatToInt(i32, r[3]) };
     }
 };

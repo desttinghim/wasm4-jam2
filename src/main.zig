@@ -9,8 +9,9 @@ const Anim = @import("Anim.zig");
 const Database = @import("database.zig");
 
 const builtin = @import("builtin");
-// const debug = builtin.mode == .Debug;
-const debug = false;
+const debug = builtin.mode == .Debug;
+const verbosity = 0;
+// const debug = false;
 
 const FBA = std.heap.FixedBufferAllocator;
 
@@ -74,7 +75,7 @@ fn Assoc(comptime T: type) type {
 var room: world.Room = undefined;
 
 export fn start() void {
-    if (debug) {
+    if (debug and verbosity > 0) {
         w4.tracef("tilemap_size = (%d, %d)", world.tilemap_size[0], world.tilemap_size[1]);
     }
     start_safe() catch |e| {
@@ -155,7 +156,7 @@ fn loadRoom() !void {
                     .kind = entity.kind,
                     .pos = pos,
                     .last_pos = pos,
-                    .collisionBox = geom.AABBf{ -4, -4, 8, 8 },
+                    .collisionBox = geom.AABBf{ -3, -3, 6, 6 },
                     .offset = geom.Vec2f{ -8, -12 },
                     .image = draw.Blit.init_frame(0x0234, &world.bitmap, .{ .bpp = .b2 }, .{ 16, 16 }, world.pot),
                 });
@@ -167,7 +168,7 @@ fn loadRoom() !void {
     animators = try level_alloc.alloc(Assoc(Anim), needs_animator);
     health = try level_alloc.alloc(Assoc(Health), needs_health);
 
-    if (debug) w4.tracef("[start] Anim count %d", needs_animator);
+    if (debug and verbosity > 0) w4.tracef("[start] Anim count %d", needs_animator);
     // Add animator components
     var anim_idx: usize = 0;
     var health_idx: usize = 0;
@@ -253,7 +254,6 @@ fn update_safe() !void {
             if (input.btnp(.one, .z)) player_combat.startAttack(time);
         } else if (!player_combat.animator.interruptable) {
             player.pos += player.facing.getVec2f() * @splat(2, speed);
-            try hurtboxes.append(.{ .key = playerIndex, .val = geom.rect.shiftf(player_combat.getHurtbox(), player.pos) });
         } else {
             if (geom.Direction.fromVec2f(input_vector)) |facing| {
                 player.facing = facing;
@@ -386,17 +386,22 @@ fn update_safe() !void {
             },
             .Static => {},
         }
+
+        // Kinematics
+        const velocity = (actor.pos - actor.last_pos) * @splat(2, @as(f32, actor.friction));
+        actor.last_pos = actor.pos;
+        actor.pos += velocity;
+
         switch (actor.kind) {
             .Pot => {
                 try hitboxes.append(.{ .key = actorIndex, .val = actor.getRect() });
             },
             .Player => {},
         }
+    }
 
-        // Kinematics
-        const velocity = (actor.pos - actor.last_pos) * @splat(2, @as(f32, actor.friction));
-        actor.last_pos = actor.pos;
-        actor.pos += velocity;
+    if (player_combat.getHurtbox()) |hurtbox| {
+        try hurtboxes.append(.{ .key = playerIndex, .val = geom.rect.shiftf(hurtbox, actors.items[playerIndex].pos) });
     }
 
     for (collectables) |*collectable| {
@@ -406,6 +411,99 @@ fn update_safe() !void {
         collectable[0] += velocity;
     }
 
+    // Store actors to remove
+    var to_remove = std.ArrayList(usize).init(alloc);
+    defer to_remove.deinit();
+
+    // Resolve hitbox/hurtbox collisions
+    for (hitboxes.items) |hitbox| {
+        for (hurtboxes.items) |hurtbox| {
+            if (hurtbox.key == hitbox.key) continue;
+            if (geom.rect.overlapsf(hurtbox.val, hitbox.val)) {
+                for (health) |*h| {
+                    if (h.key != hitbox.key) continue;
+                    if (h.val.stunned) |_| break;
+                    h.val.current -|= 1;
+                    h.val.stunned = time;
+                    if (h.val.current == 0) {
+                        try to_remove.append(h.key);
+                    }
+                }
+                const actor = &actors.items[hitbox.key];
+                const add = geom.rect.centerf(actor.getRect()) - geom.rect.centerf(hitbox.val);
+                actor.pos += add / @splat(2, @as(f32, 2));
+            }
+        }
+    }
+
+    // Remove actors in reverse
+    var new_collectables = try alloc.alloc([2]geom.Vec2f, collectables.len + to_remove.items.len);
+
+    var collectCount: usize = 0;
+    if (debug and verbosity > 1 and to_remove.items.len > 0) w4.tracef("[remove] start");
+    while (to_remove.popOrNull()) |remove| {
+        // Remove destroyed items
+        if (debug and verbosity > 1) w4.tracef("[remove] %d of %d", remove, actors.items.len);
+        const actor = actors.swapRemove(remove);
+        // Add their position to collectables
+        new_collectables[collectCount] = .{ actor.pos, actor.last_pos };
+        collectCount += 1;
+    }
+
+    for (collectables) |collectable| {
+        new_collectables[collectCount] = collectable;
+        const player = actors.items[playerIndex].pos;
+        const dist = geom.vec2.distf(collectable[0], player);
+        if (dist < 8) {
+            try to_remove.append(collectCount);
+            continue;
+        } else if (dist < 48) {
+            const towards = geom.vec2.normalizef(player - collectable[0]);
+            new_collectables[collectCount][0] += towards * @splat(2, @as(f32, 2.0));
+        }
+        collectCount += 1;
+    }
+
+    // Remove collectables in reverse
+    while (to_remove.popOrNull()) |remove| {
+        std.mem.swap([2]geom.Vec2f, &new_collectables[remove], &new_collectables[new_collectables.len - 1]);
+        new_collectables = new_collectables[0 .. collectables.len - 1];
+    }
+
+    collectables = new_collectables;
+
+    if (next_room) |next| {
+        playerStore = actors.items[playerIndex];
+        room = next;
+        try loadRoom();
+    }
+
+    try render(alloc);
+
+    if (debug) {
+        for (hitboxes.items) |hitbox| {
+            const aabb = geom.aabb.ftoi(geom.aabb.subvf(geom.rect.as_aabbf(hitbox.val), camera));
+            w4.DRAW_COLORS.* = 0x0040;
+            w4.rect(aabb[0], aabb[1], @intCast(usize, aabb[2]), @intCast(usize, aabb[3]));
+        }
+        for (hurtboxes.items) |hurtbox| {
+            const aabb = geom.aabb.ftoi(geom.aabb.subvf(geom.rect.as_aabbf(hurtbox.val), camera));
+            w4.DRAW_COLORS.* = 0x0040;
+            w4.rect(aabb[0], aabb[1], @intCast(usize, aabb[2]), @intCast(usize, aabb[3]));
+        }
+    }
+
+
+    if (debug) {
+        w4.DRAW_COLORS.* = 0x0041;
+        var chain_text: [9:0]u8 = .{ 'C', 'H', 'A', 'I', 'N', ':', ' ', ' ', 0 };
+        chain_text[6] = '0' + @divTrunc(player_combat.chain, 10);
+        chain_text[7] = '0' + @mod(player_combat.chain, 10);
+        w4.text(&chain_text, 0, 0);
+    }
+}
+
+fn render(alloc: std.mem.Allocator) !void {
     // Render background tiles
     w4.DRAW_COLORS.* = 0x1234;
     const camera_pos = geom.vec2.ftoi(camera);
@@ -453,9 +551,9 @@ fn update_safe() !void {
     for (draw_order.items) |renderable| {
         switch (renderable.kind) {
             .Actor => |actor| {
-                const pos = geom.vec2.ftoi(actor.pos + actor.offset) - camera_pos;
+                const pos = geom.vec2.ftoi(actor.pos + actor.offset - camera);
                 actor.image.blit(pos);
-                const aabb = geom.aabb.subv(geom.rect.as_aabb(geom.rect.ftoi(actor.getRect())), camera_pos);
+                const aabb = geom.aabb.ftoi(geom.aabb.subvf(actor.getAABB(), camera));
                 if (debug) {
                     w4.DRAW_COLORS.* = 0x0040;
                     w4.rect(aabb[0], aabb[1], @intCast(usize, aabb[2]), @intCast(usize, aabb[3]));
@@ -468,81 +566,6 @@ fn update_safe() !void {
         }
     }
 
-    // Store actors to remove
-    var to_remove = std.ArrayList(usize).init(alloc);
-    defer to_remove.deinit();
-
-    // Resolve hitbox/hurtbox collisions
-    for (hitboxes.items) |hitbox| {
-        for (hurtboxes.items) |hurtbox| {
-            if (hurtbox.key == hitbox.key) continue;
-            if (geom.rect.overlapsf(hurtbox.val, hitbox.val)) {
-                for (health) |*h| {
-                    if (h.key != hitbox.key) continue;
-                    if (h.val.stunned) |_| break;
-                    {}
-                    h.val.current -|= 1;
-                    h.val.stunned = time;
-                    if (h.val.current == 0) {
-                        try to_remove.append(h.key);
-                    }
-                }
-                const actor = &actors.items[hitbox.key];
-                const add = geom.rect.centerf(actor.getRect()) - geom.rect.centerf(hitbox.val);
-                actor.pos += add / @splat(2, @as(f32, 2));
-            }
-        }
-    }
-
-    // Remove actors in reverse
-    var new_collectables = try alloc.alloc([2]geom.Vec2f, collectables.len + to_remove.items.len);
-
-    var collectCount: usize = 0;
-    if (debug and to_remove.items.len > 0) w4.tracef("[remove] start");
-    while (to_remove.popOrNull()) |remove| {
-        // Remove destroyed items
-        if (debug) w4.tracef("[remove] %d of %d", remove, actors.items.len);
-        const actor = actors.swapRemove(remove);
-        // Add their position to collectables
-        new_collectables[collectCount] = .{ actor.pos, actor.last_pos };
-        collectCount += 1;
-    }
-
-    for (collectables) |collectable| {
-        new_collectables[collectCount] = collectable;
-        const player = actors.items[playerIndex].pos;
-        const dist = geom.vec2.distf(collectable[0], player);
-        if (dist < 8) {
-            try to_remove.append(collectCount);
-            continue;
-        } else if (dist < 48) {
-            const towards = geom.vec2.normalizef(player - collectable[0]);
-            new_collectables[collectCount][0] += towards * @splat(2, @as(f32, 2.0));
-        }
-        collectCount += 1;
-    }
-
-    // Remove collectables in reverse
-    while (to_remove.popOrNull()) |remove| {
-        std.mem.swap([2]geom.Vec2f, &new_collectables[remove], &new_collectables[new_collectables.len - 1]);
-        new_collectables = new_collectables[0 .. collectables.len - 1];
-    }
-
-    collectables = new_collectables;
-
-    if (next_room) |next| {
-        playerStore = actors.items[playerIndex];
-        room = next;
-        try loadRoom();
-    }
-
-    if (debug) {
-        w4.DRAW_COLORS.* = 0x0041;
-        var chain_text: [9:0]u8 = .{ 'C', 'H', 'A', 'I', 'N', ':', ' ', ' ', 0 };
-        chain_text[6] = '0' + @divTrunc(player_combat.chain, 10);
-        chain_text[7] = '0' + @mod(player_combat.chain, 10);
-        w4.text(&chain_text, 0, 0);
-    }
 }
 
 pub fn isSolid(tile: u8) bool {
@@ -567,7 +590,7 @@ pub fn collide(which: usize, rect: geom.Rectf) CollisionInfo {
         var o_rect = geom.aabb.as_rectf(geom.aabb.addvf(actor.collisionBox, actor.pos));
         if (geom.rect.overlapsf(rect, o_rect)) {
             collisions.append(actor.collisionBox, .{ .body = i });
-            if (debug) w4.tracef("collision! %d", i);
+            if (debug and verbosity > 1) w4.tracef("collision! %d", i);
         }
     }
 
