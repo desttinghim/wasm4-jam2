@@ -32,6 +32,10 @@ pub fn getAABB(this: Actor) geom.AABBf {
     return geom.aabb.addvf(this.collisionBox, this.pos);
 }
 
+pub fn getSize(this: Actor) geom.AABBf {
+    return geom.aabb.sizef(this.collisionBox);
+}
+
 pub fn getRect(this: Actor) geom.Rectf {
     return geom.aabb.as_rectf(this.getAABB());
 }

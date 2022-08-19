@@ -442,6 +442,59 @@ pub const rect = struct {
         return rectangle + vec2.doublef(vector);
     }
 
+    pub fn closestPoint(rectangle: Rectf, vector: Vec2f) Vec2f {
+        const x = x: {
+            if (vector[0] > rectangle[2]) break :x rectangle[2];
+            if (vector[0] < rectangle[0]) break :x rectangle[0];
+            break :x vector[0];
+        };
+        const y = y: {
+            if (vector[1] > rectangle[3]) break :y rectangle[3];
+            if (vector[1] < rectangle[1]) break :y rectangle[1];
+            break :y vector[0];
+        };
+        return Vec2f{ x, y };
+    }
+
+    pub fn closestPointOnBounds(rectangle: Rectf, vector: Vec2f) Vec2f {
+        const westd = @fabs(rectangle[0] - vector[0]);
+        const eastd = @fabs(rectangle[2] - vector[0]);
+        const southd = @fabs(rectangle[3] - vector[1]);
+        const northd = @fabs(rectangle[1] - vector[1]);
+
+        var minDist = westd;
+        var boundsPoint = Vec2f{ rectangle[0], vector[1] };
+        if (eastd < minDist) {
+            minDist = eastd;
+            boundsPoint = Vec2f{ rectangle[2], vector[1] };
+        }
+        if (southd < minDist) {
+            minDist = southd;
+            boundsPoint = Vec2f{ vector[0], rectangle[3] };
+        }
+        if (northd < minDist) {
+            minDist = northd;
+            boundsPoint = Vec2f{ vector[0], rectangle[1] };
+        }
+        return boundsPoint;
+    }
+
+    pub fn penetration(r1: Rectf, r2: Rectf) Vec2f {
+        const sum = minkowskiSum(r1, r2);
+        return closestPointOnBounds(sum, Vec2f{ 0, 0 });
+    }
+
+    pub fn minkowskiSum(r1: Rectf, r2: Rectf) AABBf {
+        const size1 = sizef(r1);
+        const size2 = sizef(r2);
+        return .{
+            r1[0] - r2[2],
+            r1[1] - r2[3],
+            size1[0] + size2[0],
+            size1[1] + size2[1],
+        };
+    }
+
     /// Converts a f32 backed vector to an i32 backed one.
     pub fn ftoi(r: Rectf) Rect {
         return Rect{ @floatToInt(i32, @floor(r[0])), @floatToInt(i32, @floor(r[1])), @floatToInt(i32, @floor(r[2])), @floatToInt(i32, @floor(r[3])) };

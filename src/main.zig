@@ -10,7 +10,7 @@ const Database = @import("database.zig");
 
 const builtin = @import("builtin");
 const debug = builtin.mode == .Debug;
-const verbosity = 1;
+const verbosity = 2;
 // const debug = false;
 
 const FBA = std.heap.FixedBufferAllocator;
@@ -58,7 +58,7 @@ var player_combat = Combat{
     .punch_side = .{ &world.player_anim_punch_side, &world.player_anim_punch_side2 },
 };
 var camera = geom.Vec2f{ 0, 0 };
-var camera_player_pos = geom.Vec2f{0, 0};
+var camera_player_pos = geom.Vec2f{ 0, 0 };
 var playerStore: Actor = undefined;
 
 var actors: std.ArrayList(Actor) = undefined;
@@ -143,6 +143,7 @@ fn loadRoom() !void {
     var needs_animator: usize = 1;
     // TODO: give player a health stat
     var needs_health: usize = 0;
+    var needs_combat: usize = 0;
 
     // Load other entities
     for (entities) |entity| {
@@ -158,7 +159,20 @@ fn loadRoom() !void {
                     .last_pos = pos,
                     .collisionBox = geom.AABBf{ -3, -3, 6, 6 },
                     .offset = geom.Vec2f{ -8, -12 },
-                    .image = draw.Blit.init_frame(0x0234, &world.bitmap, .{ .bpp = .b2 }, .{ 16, 16 }, world.pot),
+                    .image = draw.Blit.init_frame(0x0243, &world.bitmap, .{ .bpp = .b2 }, .{ 16, 16 }, world.pot),
+                });
+            },
+            .Skeleton => {
+                needs_health += 1;
+                needs_combat += 1;
+                try actors.append(Actor{
+                    .kind = entity.kind,
+                    .pos = pos,
+                    .last_pos = pos,
+                    .body = .Kinematic,
+                    .collisionBox = geom.AABBf{ -3, -3, 6, 6 },
+                    .offset = geom.Vec2f{ -8, -12 },
+                    .image = draw.Blit.init_frame(0x0243, &world.bitmap, .{ .bpp = .b2 }, .{ 16, 16 }, world.skeleton),
                 });
             },
         }
@@ -173,21 +187,31 @@ fn loadRoom() !void {
     var anim_idx: usize = 0;
     var health_idx: usize = 0;
     for (actors.items) |actor, a| {
-        if (actor.kind == .Player) {
-            animators[anim_idx] = .{ .key = a, .val = .{
-                .anim = &world.player_anim_walk_down,
-            } };
-            player_combat.animator = &animators[anim_idx].val;
-            player_combat.actor = &actors.items[a];
-            anim_idx += 1;
-        }
-        if (actor.kind == .Pot) {
-            health[health_idx] = .{ .key = a, .val = .{
-                .max = 2,
-                .current = 2,
-                .stunTime = 60,
-            } };
-            health_idx += 1;
+        switch (actor.kind) {
+            .Player => {
+                animators[anim_idx] = .{ .key = a, .val = .{
+                    .anim = &world.player_anim_walk_down,
+                } };
+                player_combat.animator = &animators[anim_idx].val;
+                player_combat.actor = &actors.items[a];
+                anim_idx += 1;
+            },
+            .Pot => {
+                health[health_idx] = .{ .key = a, .val = .{
+                    .max = 2,
+                    .current = 2,
+                    .stunTime = 60,
+                } };
+                health_idx += 1;
+            },
+            .Skeleton => {
+                health[health_idx] = .{ .key = a, .val = .{
+                    .max = 5,
+                    .current = 5,
+                    .stunTime = 60,
+                } };
+                health_idx += 1;
+            },
         }
     }
 
@@ -343,33 +367,33 @@ fn update_safe() !void {
     }
 
     for (actors.items) |*actor, actorIndex| {
+        if (actor.body != .Rigid) continue;
         const as_rectf = geom.aabb.as_rectf;
         const addvf = geom.aabb.addvf;
         const hcols = collide(actorIndex, as_rectf(addvf(actor.collisionBox, geom.Vec2f{ actor.pos[0], actor.last_pos[1] })));
         const vcols = collide(actorIndex, as_rectf(addvf(actor.collisionBox, geom.Vec2f{ actor.last_pos[0], actor.pos[1] })));
-        switch (actor.body) {
-            .Rigid => {
-                // TODO: make them bounce
-                var velocity = (actor.pos - actor.last_pos) * @splat(2, @as(f32, actor.friction));
-                for (hcols.items) |_, i| {
-                    if (hcols.which[i] != .body) continue;
-                    const other = &actors.items[hcols.which[i].body];
-                    if (other.body == .Rigid) {
-                        velocity /= @splat(2, @as(f32, 2));
-                        other.pos += velocity;
-                    }
-                }
-                for (vcols.items) |_, i| {
-                    if (vcols.which[i] != .body) continue;
-                    const other = &actors.items[vcols.which[i].body];
-                    if (other.body == .Rigid) {
-                        velocity /= @splat(2, @as(f32, 2));
-                        other.pos += velocity;
-                    }
-                }
-                actor.pos = actor.last_pos + velocity;
-            },
-            .Kinematic, .Static => {},
+        var allcols = try std.ArrayList(usize).initCapacity(alloc, 9);
+
+        for (hcols.iterWhich()) |which| {
+            if (which != .body) continue;
+            try allcols.append(which.body);
+        }
+        vcol: for (vcols.iterWhich()) |which| {
+            if (which != .body) continue;
+            for (allcols.items) |which2| {
+                if (which.body == which2) continue :vcol;
+            }
+            try allcols.append(which.body);
+        }
+
+        var velocity = (actor.pos - actor.last_pos) * @splat(2, @as(f32, actor.friction));
+        for (allcols.items) |body| {
+            const other = &actors.items[body];
+            if (other.body == .Rigid) {
+                other.pos += velocity / @splat(2, @as(f32, 2));
+            } else {
+                actor.pos -= velocity / @splat(2, @as(f32, 2));
+            }
         }
     }
 
@@ -396,6 +420,9 @@ fn update_safe() !void {
             .Pot => {
                 try hitboxes.append(.{ .key = actorIndex, .val = actor.getRect() });
             },
+            .Skeleton => {
+                try hitboxes.append(.{ .key = actorIndex, .val = actor.getRect() });
+            },
             .Player => {},
         }
     }
@@ -406,7 +433,7 @@ fn update_safe() !void {
 
     for (collectables) |*collectable| {
         // Kinematics
-        const velocity = (collectable[0] - collectable[1]) * @splat(2, @as(f32, 0.9));
+        const velocity = (collectable[0] - collectable[1]) * @splat(2, @as(f32, 0.8));
         collectable[1] = collectable[0];
         collectable[0] += velocity;
     }
@@ -437,10 +464,15 @@ fn update_safe() !void {
                     if (h.val.current == 0) {
                         try to_remove.append(h.key);
                     }
+                    const taker = &actors.items[hitbox.key];
+                    const hitter = &actors.items[hurtbox.key];
+                    const add = taker.pos - hitter.pos;
+                    const vel = add / @splat(2, @as(f32, 3));
+                    taker.pos += vel;
+                    if (debug and verbosity > 1) w4.tracef("[hit] taker (%d, %d)", @floatToInt(i32, taker.pos[0]), @floatToInt(i32, taker.pos[1]));
+                    if (debug and verbosity > 1) w4.tracef("[hit] hitter (%d, %d)", @floatToInt(i32, hitter.pos[0]), @floatToInt(i32, hitter.pos[1]));
+                    if (debug and verbosity > 1) w4.tracef("[hit] velocity (%d, %d)", @floatToInt(i32, vel[0]), @floatToInt(i32, vel[1]));
                 }
-                const actor = &actors.items[hitbox.key];
-                const add = geom.rect.centerf(actor.getRect()) - geom.rect.centerf(hitbox.val);
-                actor.pos += add / @splat(2, @as(f32, 2));
             }
         }
     }
@@ -466,9 +498,9 @@ fn update_safe() !void {
         for (health) |h, i| {
             if (h.key == remove) {
                 if (i != health.len - 1) {
-                    std.mem.swap(Assoc(Health), &health[i], &health[health.len-1]);
+                    std.mem.swap(Assoc(Health), &health[i], &health[health.len - 1]);
                 }
-                health = health[0..health.len-1];
+                health = health[0 .. health.len - 1];
                 if (debug and verbosity > 0) w4.tracef("[remove] remove health %d, remove=%d, key=%d", i, remove, h.key);
                 if (debug and verbosity > 0) w4.tracef("[remove] health_len=%d", health.len);
                 break;
@@ -526,7 +558,6 @@ fn update_safe() !void {
             w4.rect(aabb[0], aabb[1], @intCast(usize, aabb[2]), @intCast(usize, aabb[3]));
         }
     }
-
 
     if (debug) {
         w4.DRAW_COLORS.* = 0x0041;
@@ -596,7 +627,6 @@ fn render(alloc: std.mem.Allocator) !void {
             },
         }
     }
-
 }
 
 pub fn isSolid(tile: u8) bool {
@@ -621,7 +651,7 @@ pub fn collide(which: usize, rect: geom.Rectf) CollisionInfo {
         var o_rect = geom.aabb.as_rectf(geom.aabb.addvf(actor.collisionBox, actor.pos));
         if (geom.rect.overlapsf(rect, o_rect)) {
             collisions.append(actor.collisionBox, .{ .body = i });
-            if (debug and verbosity > 1) w4.tracef("collision! %d", i);
+            if (debug and verbosity > 2) w4.tracef("collision! %d", i);
         }
     }
 
@@ -664,6 +694,10 @@ pub const CollisionInfo = struct {
             .items = undefined,
             .which = undefined,
         };
+    }
+
+    pub fn iterWhich(col: CollisionInfo) []const BodyInfo {
+        return col.which[0..col.len];
     }
 
     pub fn append(col: *CollisionInfo, item: geom.AABBf, body: BodyInfo) void {
