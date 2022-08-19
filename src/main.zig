@@ -54,7 +54,7 @@ var camera = geom.Vec2f{ 0, 0 };
 var playerStore: Actor = undefined;
 
 var actors: std.ArrayList(Actor) = undefined;
-var collectables: []geom.Vec2f = &.{};
+var collectables: [][2]geom.Vec2f = &.{};
 const AnimStore = struct { owns: usize, anim: Anim };
 var animators: []AnimStore = undefined;
 
@@ -305,6 +305,13 @@ fn update_safe() !void {
         }
     }
 
+    for (collectables) |*collectable| {
+        // Kinematics
+        const velocity = (collectable[0] - collectable[1]) * @splat(2, @as(f32, 0.9));
+        collectable[1] = collectable[0];
+        collectable[0] += velocity;
+    }
+
     // Render background tiles
     w4.DRAW_COLORS.* = 0x1234;
     const camera_pos = geom.vec2.ftoi(camera);
@@ -332,7 +339,7 @@ fn update_safe() !void {
     }
 
     for (collectables) |collectable| {
-        try draw_order.append(.{ .kind = .{ .Particle = collectable } });
+        try draw_order.append(.{ .kind = .{ .Particle = collectable[0] } });
     }
 
     std.sort.insertionSort(Renderable, draw_order.items, {}, Renderable.compare);
@@ -366,12 +373,14 @@ fn update_safe() !void {
             if (box.key == actorIdx) continue;
             if (geom.rect.overlapsf(box.val, actor.getRect())) {
                 try to_remove.append(actorIdx);
+                const add = geom.rect.centerf(actor.getRect()) - geom.rect.centerf(box.val);
+                actor.pos += add / @splat(2, @as(f32, 2));
             }
         }
     }
 
     // Remove actors in reverse
-    var new_collectables = try alloc.alloc(geom.Vec2f, collectables.len + to_remove.items.len);
+    var new_collectables = try alloc.alloc([2]geom.Vec2f, collectables.len + to_remove.items.len);
 
     var collectCount: usize = 0;
     if (debug and to_remove.items.len > 0) w4.tracef("[remove] start");
@@ -380,27 +389,27 @@ fn update_safe() !void {
         if (debug) w4.tracef("[remove] %d of %d", remove, actors.items.len);
         const actor = actors.swapRemove(remove);
         // Add their position to collectables
-        new_collectables[collectCount] = actor.pos;
+        new_collectables[collectCount] = .{actor.pos, actor.last_pos};
         collectCount += 1;
     }
 
     for (collectables) |collectable| {
         new_collectables[collectCount] = collectable;
         const player = actors.items[playerIndex].pos;
-        const dist = geom.vec2.distf(collectable, player);
+        const dist = geom.vec2.distf(collectable[0], player);
         if (dist < 8) {
             try to_remove.append(collectCount);
             continue;
         } else if (dist < 48) {
-            const towards = geom.vec2.normalizef(player - collectable);
-            new_collectables[collectCount] += towards * @splat(2, @as(f32, 2.0));
+            const towards = geom.vec2.normalizef(player - collectable[0]);
+            new_collectables[collectCount][0] += towards * @splat(2, @as(f32, 2.0));
         }
         collectCount += 1;
     }
 
     // Remove collectables in reverse
     while (to_remove.popOrNull()) |remove| {
-        std.mem.swap(geom.Vec2f, &new_collectables[remove], &new_collectables[new_collectables.len - 1]);
+        std.mem.swap([2]geom.Vec2f, &new_collectables[remove], &new_collectables[new_collectables.len - 1]);
         new_collectables = new_collectables[0 .. collectables.len - 1];
     }
 

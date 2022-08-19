@@ -357,6 +357,10 @@ pub const rect = struct {
         return rectangle[2];
     }
 
+    pub fn centerf(rectangle: Rectf) Vec2f {
+        return (top_leftf(rectangle) + bottom_rightf(rectangle)) / @splat(2, @as(f32, 2));
+    }
+
     pub fn bottomf(rectangle: Rectf) f32 {
         return rectangle[3];
     }
