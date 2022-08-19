@@ -1,6 +1,6 @@
 const w4 = @import("wasm4.zig");
-const draw = @import("draw.zig");
 const std = @import("std");
+const draw = @import("draw.zig");
 const geom = @import("geom.zig");
 const input = @import("input.zig");
 const world = @import("world.zig");
@@ -33,79 +33,15 @@ const frame_alloc: [2]std.mem.Allocator = .{
 };
 
 const Actor = @import("Actor.zig");
-
-const Combat = struct {
-    animator: *Anim,
-    actor: *Actor,
-    is_attacking: bool = false,
-    last_attacking: usize = 0,
-    last_attack: usize = 0,
-    chain: u8 = 0,
-
-    image: draw.Blit,
-    offset: geom.Vec2f,
-    punch_down: [2][]const Anim.Ops,
-    punch_up: [2][]const Anim.Ops,
-    punch_side: [2][]const Anim.Ops,
-
-    pub fn endAttack(this: *Combat) void {
-        this.chain = 0;
-        this.is_attacking = false;
-        this.actor.image = player_blit;
-        this.actor.offset = player_offset;
-        this.actor.image.flags.flip_x = this.actor.facing == .Left;
-        // Arrest momentum
-        this.actor.last_pos = this.actor.pos;
-    }
-
-    /// Relative to offset
-    pub fn getHurtbox(this: Combat) geom.Rectf {
-        // This will be called after startAttack, so last_attack == 0 is flipped
-        if (this.last_attack == 0) {
-            return switch (this.actor.facing) {
-                .Up => .{ -4, -20, 13, 10 },
-                .Left => .{ -16, -10, 12, 11 },
-                .Right => .{ 4, -10, 12, 11 },
-                .Down => .{ -4, 0, 12, 12 },
-            };
-        } else {
-            return switch (this.actor.facing) {
-                .Up => .{ -7, -20, 13, 10 },
-                .Left => .{ -16, -10, 12, 11 },
-                .Right => .{ 4, -10, 12, 11 },
-                .Down => .{ -8, 0, 12, 12 },
-            };
-        }
-    }
-
-    pub fn startAttack(this: *Combat, now: usize) void {
-        if (!this.animator.interruptable) {
-            this.chain = 0;
-            return;
-        }
-        if (now - this.last_attacking <= 45) {
-            this.chain +|= 1;
-        }
-        this.actor.image = this.image;
-        this.actor.offset = this.offset;
-        if (this.actor.facing == .Down) {
-            this.animator.play(this.punch_down[this.last_attack]);
-        } else if (this.actor.facing == .Up) {
-            this.animator.play(this.punch_up[this.last_attack]);
-        } else {
-            this.animator.play(this.punch_side[this.last_attack]);
-            this.actor.image.flags.flip_x = this.actor.facing == .Left;
-        }
-        this.is_attacking = true;
-        this.last_attacking = now;
-        this.last_attack = (this.last_attack + 1) % 2;
-    }
-};
+const Renderable = @import("Renderable.zig");
+const Combat = @import("Combat.zig");
 
 const player_blit = draw.Blit.init_frame(world.player_style, &world.player_bmp, .{ .bpp = .b2 }, .{ 16, 16 }, 0);
 const player_offset = geom.Vec2f{ -8, -12 };
 var playerIndex: usize = undefined;
 var player_combat = Combat{
+    .actorImage = player_blit,
+    .actorOffset = player_offset,
     .actor = undefined,
     .animator = undefined,
     .offset = geom.Vec2f{ -16, -20 },
@@ -118,6 +54,7 @@ var camera = geom.Vec2f{ 0, 0 };
 var playerStore: Actor = undefined;
 
 var actors: std.ArrayList(Actor) = undefined;
+var collectables: []geom.Vec2f = &.{};
 const AnimStore = struct { owns: usize, anim: Anim };
 var animators: []AnimStore = undefined;
 
@@ -385,22 +322,36 @@ fn update_safe() !void {
         store.anim.update(&actor.image.frame, &actor.image.flags);
     }
 
-    var draw_order = try std.ArrayList(*Actor).initCapacity(alloc, actors.items.len);
+    var draw_order = try std.ArrayList(Renderable).initCapacity(alloc, actors.items.len + collectables.len);
     defer draw_order.deinit();
 
     for (actors.items) |*actor| {
-        try draw_order.append(actor);
+        try draw_order.append(Renderable{ .kind = .{ .Actor = actor }});
     }
 
-    std.sort.insertionSort(*Actor, draw_order.items, {}, Actor.compare);
-    for (draw_order.items) |actor| {
-        const pos = geom.vec2.ftoi(actor.pos + actor.offset) - camera_pos;
-        actor.image.blit(pos);
-        const aabb = geom.aabb.subv(geom.rect.as_aabb(geom.rect.ftoi(actor.getRect())), camera_pos);
-        if (debug) {
-            w4.DRAW_COLORS.* = 0x0040;
-            w4.rect(aabb[0], aabb[1], @intCast(usize, aabb[2]), @intCast(usize, aabb[3]));
+    for (collectables) |collectable| {
+        try draw_order.append(.{ .kind = .{ .Particle = collectable }});
+    }
+
+    std.sort.insertionSort(Renderable, draw_order.items, {}, Renderable.compare);
+
+
+    for (draw_order.items) |renderable| {
+        switch (renderable.kind) {
+            .Actor => |actor| {
+                const pos = geom.vec2.ftoi(actor.pos + actor.offset) - camera_pos;
+                actor.image.blit(pos);
+            },
+            .Particle => |p| {
+                w4.DRAW_COLORS.* = 0x0234;
+                world.blit(geom.vec2.ftoi(p) - camera_pos, world.heart);
+            },
         }
+        // const aabb = geom.aabb.subv(geom.rect.as_aabb(geom.rect.ftoi(renderable.getRect())), camera_pos);
+        // if (debug) {
+        //     w4.DRAW_COLORS.* = 0x0040;
+        //     w4.rect(aabb[0], aabb[1], @intCast(usize, aabb[2]), @intCast(usize, aabb[3]));
+        // }
     }
 
     // Store actors to remove
@@ -417,12 +368,25 @@ fn update_safe() !void {
         }
     }
 
+    // Remove items in reverse
     std.mem.reverse(usize, to_remove.items);
+    var new_collectables = try alloc.alloc(geom.Vec2f, collectables.len + to_remove.items.len);
 
-    // Remove destroyed items
+    var collectCount: usize = 0;
     for (to_remove.items) |remove| {
-        _ = actors.swapRemove(remove);
+        // Remove destroyed items
+        const actor = actors.swapRemove(remove);
+        // Add their position to collectables
+        new_collectables[collectCount] = actor.pos;
+        collectCount += 1;
     }
+
+    for (collectables) |collectable| {
+        new_collectables[collectCount] = collectable;
+        collectCount += 1;
+    }
+
+    collectables = new_collectables;
 
     if (next_room) |next| {
         playerStore = actors.items[playerIndex];

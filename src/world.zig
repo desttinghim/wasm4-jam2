@@ -24,6 +24,7 @@ pub fn blit(pos: geom.Vec2, tile: isize) void {
 
 pub const grass = 0;
 pub const pot = 135;
+pub const heart = 129;
 
 pub const player_style = 0x4300;
 pub const player_bmp = draw.Bitmap{ .data = &assets.mc, .width = assets.mc_width, .height = assets.mc_height };
