@@ -47,7 +47,7 @@ pub fn getHurtbox(this: Combat) ?geom.AABBf {
     offset[0] += chain_offset_x;
     const hurtbox: geom.AABBf = switch (this.actor.facing) {
         .Northwest, .Northeast, .North, .Southwest, .Southeast, .South => .{ 0, -8, 14, 12 },
-        .West, .East => .{ -4, -10, 12, 14 },
+        .West, .East => .{ 0, -10, 12, 14 },
     };
     return geom.aabb.addvf(hurtbox, offset);
 }
