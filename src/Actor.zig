@@ -33,3 +33,7 @@ pub fn compare(ctx: void, a: *const Actor, b: *const Actor) bool {
     _ = ctx;
     return a.pos[1] + a.offset[1] < b.pos[1] + b.offset[1];
 }
+
+pub fn toGrid(this: Actor) geom.Vec2 {
+    return geom.vec2.ftoi(this.pos / world.tile_sizef);
+}

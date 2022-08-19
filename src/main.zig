@@ -14,9 +14,13 @@ const debug = false;
 
 const FBA = std.heap.FixedBufferAllocator;
 
-var long_alloc_buffer: [16384]u8 = undefined;
+var long_alloc_buffer: [8192]u8 = undefined;
 var long_fba = FBA.init(&long_alloc_buffer);
 const long_alloc = long_fba.allocator();
+
+var level_alloc_buffer: [8192]u8 = undefined;
+var level_fba = FBA.init(&level_alloc_buffer);
+const level_alloc = level_fba.allocator();
 
 var frame_alloc_buffer: [2][8192]u8 = undefined;
 var frame_fba: [2]FBA = .{
@@ -111,6 +115,7 @@ var player_combat = Combat{
     .punch_side = .{ &world.player_anim_punch_side, &world.player_anim_punch_side2 },
 };
 var camera = geom.Vec2f{ 0, 0 };
+var playerStore: Actor = undefined;
 
 var actors: std.ArrayList(Actor) = undefined;
 const AnimStore = struct { owns: usize, anim: Anim };
@@ -161,22 +166,31 @@ fn start_safe() !void {
     var spawn: world.Entity = db.getSpawn() orelse return error.PlayerNotFound;
     room = db.getRoomContaining(spawn.toVec()) orelse return error.RoomNotFound;
 
-    const entities = db.getRoomEntities(room) orelse return error.NoRoomEntities;
-    actors = try std.ArrayList(Actor).initCapacity(long_alloc, entities.len);
-
     // Create player
     {
         const tile_sizef = geom.vec2.itof(world.tile_size);
         const pos = spawn.toPos() + (tile_sizef / @splat(2, @as(f32, 2)));
-        try actors.append(Actor{
+        playerStore = Actor{
             .kind = spawn.kind,
             .pos = pos,
             .last_pos = pos,
             .collisionBox = geom.AABBf{ -4, -4, 8, 8 },
             .offset = geom.Vec2f{ -8, -12 },
             .image = player_blit,
-        });
+        };
     }
+
+    try loadRoom();
+}
+
+fn loadRoom() !void {
+    // Reset the level allocator
+    level_fba.reset();
+
+    const entities = db.getRoomEntities(room) orelse return error.NoRoomEntities;
+    actors = try std.ArrayList(Actor).initCapacity(level_alloc, entities.len);
+
+    try actors.append(playerStore);
 
     // Declare animator component count (player is implicitly counted)
     var needs_animator: usize = 1;
@@ -201,7 +215,7 @@ fn start_safe() !void {
     }
 
     // Allocate animators
-    animators = try long_alloc.alloc(AnimStore, needs_animator);
+    animators = try level_alloc.alloc(AnimStore, needs_animator);
 
     if (debug) w4.tracef("[start] Anim count %d", needs_animator);
     // Add animator components
@@ -239,6 +253,8 @@ fn update_safe() !void {
 
     var hurtboxes = std.ArrayList(Assoc(geom.Rectf)).init(alloc);
     defer hurtboxes.deinit();
+
+    var next_room: ?world.Room = null;
 
     {
         // Input
@@ -296,6 +312,10 @@ fn update_safe() !void {
             if (camera[1] < bounds[1]) camera[1] = bounds[1];
             if (camera[0] + 160 > bounds[2]) camera[0] = bounds[2] - 160;
             if (camera[1] + 160 > bounds[3]) camera[1] = bounds[3] - 160;
+
+            if (player.pos[0] < bounds[0] or player.pos[1] < bounds[1] or player.pos[0] > bounds[2] or player.pos[1] > bounds[3]) {
+                next_room = db.getRoomContaining(player.toGrid());
+            }
         }
 
         var animator = player_combat.animator;
@@ -381,6 +401,12 @@ fn update_safe() !void {
     // Remove destroyed items
     for (to_remove.items) |remove| {
         _ = actors.swapRemove(remove);
+    }
+
+    if (next_room) |next| {
+        playerStore = actors.items[playerIndex];
+        room = next;
+        try loadRoom();
     }
 
     if (debug) {

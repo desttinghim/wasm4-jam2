@@ -10,6 +10,7 @@ pub const bitmap = draw.Bitmap{
     .height = assets.tilemap_packed_height,
 };
 pub const tile_size = geom.Vec2{ 16, 16 };
+pub const tile_sizef = geom.vec2.itof(tile_size);
 pub const tilemap_size = @divFloor(geom.Vec2{ bitmap.width, bitmap.height }, tile_size);
 pub const room_grid_size = geom.Vec2{ 10, 10 };
 
