@@ -193,6 +193,7 @@ fn update_safe() !void {
 
     var next_room: ?world.Room = null;
 
+    // Update player
     {
         // Input
         var player = &actors.items[playerIndex];
@@ -257,6 +258,9 @@ fn update_safe() !void {
             const down = (player.pos[1] > bounds[3]);
             if (left or up or right or down) {
                 next_room = db.getRoomContaining(player.toGrid());
+                if (next_room) |next| {
+                    if (room.toID() == next.toID()) next_room = null;
+                }
             }
             if (next_room != null and left) {
                 player.pos[0] = bounds[0] - size[0];
@@ -301,16 +305,13 @@ fn update_safe() !void {
         }
     }
 
-    // Render
+    // Render background tiles
     w4.DRAW_COLORS.* = 0x1234;
     const camera_pos = geom.vec2.ftoi(camera);
-    // const camera_pos_g = @divTrunc(camera_pos, world.tile_size);
     var x: isize = 0;
     while (x < room.size[0]) : (x += 1) {
         var y: isize = 0;
-        // if (!(x >= camera_pos_g[0] and x < camera_pos_g[0]  + 11)) continue;
         while (y < room.size[1]) : (y += 1) {
-            // if (!(y >= camera_pos_g[1]  and y < camera_pos_g[1]  + 11)) continue;
             const idx = @intCast(usize, y * @intCast(i16, room.size[0]) + x);
             world.blit((geom.Vec2{ x, y } + room.toVec2()) * world.tile_size - camera_pos, room.tiles[idx]);
         }
@@ -322,36 +323,37 @@ fn update_safe() !void {
         store.anim.update(&actor.image.frame, &actor.image.flags);
     }
 
+    // Sort all entities by y
     var draw_order = try std.ArrayList(Renderable).initCapacity(alloc, actors.items.len + collectables.len);
     defer draw_order.deinit();
 
     for (actors.items) |*actor| {
-        try draw_order.append(Renderable{ .kind = .{ .Actor = actor }});
+        try draw_order.append(Renderable{ .kind = .{ .Actor = actor } });
     }
 
     for (collectables) |collectable| {
-        try draw_order.append(.{ .kind = .{ .Particle = collectable }});
+        try draw_order.append(.{ .kind = .{ .Particle = collectable } });
     }
 
     std.sort.insertionSort(Renderable, draw_order.items, {}, Renderable.compare);
 
-
+    //  Render entities
     for (draw_order.items) |renderable| {
         switch (renderable.kind) {
             .Actor => |actor| {
                 const pos = geom.vec2.ftoi(actor.pos + actor.offset) - camera_pos;
                 actor.image.blit(pos);
+                const aabb = geom.aabb.subv(geom.rect.as_aabb(geom.rect.ftoi(actor.getRect())), camera_pos);
+                if (debug) {
+                    w4.DRAW_COLORS.* = 0x0040;
+                    w4.rect(aabb[0], aabb[1], @intCast(usize, aabb[2]), @intCast(usize, aabb[3]));
+                }
             },
             .Particle => |p| {
                 w4.DRAW_COLORS.* = 0x0234;
                 world.blit(geom.vec2.ftoi(p) - camera_pos, world.heart);
             },
         }
-        // const aabb = geom.aabb.subv(geom.rect.as_aabb(geom.rect.ftoi(renderable.getRect())), camera_pos);
-        // if (debug) {
-        //     w4.DRAW_COLORS.* = 0x0040;
-        //     w4.rect(aabb[0], aabb[1], @intCast(usize, aabb[2]), @intCast(usize, aabb[3]));
-        // }
     }
 
     // Store actors to remove
@@ -368,13 +370,14 @@ fn update_safe() !void {
         }
     }
 
-    // Remove items in reverse
-    std.mem.reverse(usize, to_remove.items);
+    // Remove actors in reverse
     var new_collectables = try alloc.alloc(geom.Vec2f, collectables.len + to_remove.items.len);
 
     var collectCount: usize = 0;
-    for (to_remove.items) |remove| {
+    if (debug and to_remove.items.len > 0) w4.tracef("[remove] start");
+    while (to_remove.popOrNull()) |remove| {
         // Remove destroyed items
+        if (debug) w4.tracef("[remove] %d of %d", remove, actors.items.len);
         const actor = actors.swapRemove(remove);
         // Add their position to collectables
         new_collectables[collectCount] = actor.pos;
@@ -383,7 +386,22 @@ fn update_safe() !void {
 
     for (collectables) |collectable| {
         new_collectables[collectCount] = collectable;
+        const player = actors.items[playerIndex].pos;
+        const dist = geom.vec2.distf(collectable, player);
+        if (dist < 8) {
+            try to_remove.append(collectCount);
+            continue;
+        } else if (dist < 48) {
+            const towards = geom.vec2.normalizef(player - collectable);
+            new_collectables[collectCount] += towards * @splat(2, @as(f32, 2.0));
+        }
         collectCount += 1;
+    }
+
+    // Remove collectables in reverse
+    while (to_remove.popOrNull()) |remove| {
+        std.mem.swap(geom.Vec2f, &new_collectables[remove], &new_collectables[new_collectables.len - 1]);
+        new_collectables = new_collectables[0 .. collectables.len - 1];
     }
 
     collectables = new_collectables;
