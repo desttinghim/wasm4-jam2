@@ -313,7 +313,25 @@ fn update_safe() !void {
             if (camera[0] + 160 > bounds[2]) camera[0] = bounds[2] - 160;
             if (camera[1] + 160 > bounds[3]) camera[1] = bounds[3] - 160;
 
-            if (player.pos[0] < bounds[0] or player.pos[1] < bounds[1] or player.pos[0] > bounds[2] or player.pos[1] > bounds[3]) {
+            const size = geom.aabb.sizef(player.collisionBox);
+            if (player.pos[0] - size[0] / 2 < bounds[0]) {
+                player.pos[0] = bounds[0] - size[0] / 2;
+                player.last_pos = player.pos;
+                next_room = db.getRoomContaining(player.toGrid());
+            }
+            if (player.pos[1] - size[1] < bounds[1]) {
+                player.pos[1] = bounds[1] - size[1];
+                player.last_pos = player.pos;
+                next_room = db.getRoomContaining(player.toGrid());
+            }
+            if (player.pos[0] + size[0] / 2 > bounds[2]) {
+                player.pos[0] = bounds[2] + size[0] / 2;
+                player.last_pos = player.pos;
+                next_room = db.getRoomContaining(player.toGrid());
+            }
+            if (player.pos[1] > bounds[3]) {
+                player.pos[1] = bounds[3] + 16;
+                player.last_pos = player.pos;
                 next_room = db.getRoomContaining(player.toGrid());
             }
         }
