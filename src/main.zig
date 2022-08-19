@@ -467,7 +467,8 @@ fn update_safe() !void {
                     const taker = &actors.items[hitbox.key];
                     const hitter = &actors.items[hurtbox.key];
                     const add = taker.pos - hitter.pos;
-                    const vel = add / @splat(2, @as(f32, 3));
+                    const max = geom.vec2.normalizef(add) * @splat(2, @as(f32, 4));
+                    const vel = @minimum(max, add / @splat(2, @as(f32, 3)));
                     taker.pos += vel;
                     if (debug and verbosity > 1) w4.tracef("[hit] taker (%d, %d)", @floatToInt(i32, taker.pos[0]), @floatToInt(i32, taker.pos[1]));
                     if (debug and verbosity > 1) w4.tracef("[hit] hitter (%d, %d)", @floatToInt(i32, hitter.pos[0]), @floatToInt(i32, hitter.pos[1]));
