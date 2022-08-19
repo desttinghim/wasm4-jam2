@@ -183,9 +183,8 @@ pub const Room = struct {
     coord: [2]i8,
     size: [2]u8,
     tiles: []const u8,
-    num: usize = 0,
 
-    pub fn toArr(room: Room) geom.Vec2 {
+    pub fn toVec(room: Room) geom.Vec2 {
         return .{ room.coord[0], room.coord[1] };
     }
 
@@ -194,27 +193,31 @@ pub const Room = struct {
     }
 
     pub fn toAABB(room: Room) geom.AABB {
-        const pos = room.toVec2();
-        return .{ pos[0], pos[1], room.size[0], room.size[1] };
+        return geom.aabb.initv(room.toVec2(), geom.Vec2{ room.size[0], room.size[1] });
     }
 
     pub fn toID(room: Room) u16 {
-        return @intCast(u16, @bitCast(u8, room.coord[0])) | @intCast(u16, @bitCast(u8, room.coord[1])) << 8;
+        return coordToId(room.coord);
+    }
+
+    pub fn coordToId(coord: [2]i8) u16 {
+        return @intCast(u16, @bitCast(u8, coord[0])) | @intCast(u16, @bitCast(u8, coord[1])) << 8;
     }
 
     pub fn coordFromID(id: u16) [2]i8 {
         const x = @bitCast(i8, @intCast(u8, 0x00_FF & id));
         const y = @bitCast(i8, @intCast(u8, 0xFF_00 & id >> 8));
-        return .{x, y};
+        return .{ x, y };
     }
 
-    pub fn compare(ctx: void, a:  Room, b:  Room) bool {
+    pub fn compare(ctx: void, a: Room, b: Room) bool {
         _ = ctx;
         return a.toID() > b.toID();
     }
 
+    // Grid coordinates
     pub fn contains(room: Room, coord: geom.Vec2) bool {
-        const rect = geom.aabb.as_rect(geom.aabb.initv(geom.Vec2{ room.coord[0], room.coord[1] } * room_grid_size, geom.Vec2{ room.size[0], room.size[1] }));
+        const rect = geom.aabb.as_rect(geom.aabb.initv(room.toVec2(), geom.Vec2{ room.size[0], room.size[1] }));
         return (geom.rect.contains(rect, coord));
     }
 

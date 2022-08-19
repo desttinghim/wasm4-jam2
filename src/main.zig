@@ -14,7 +14,7 @@ const debug = false;
 
 const FBA = std.heap.FixedBufferAllocator;
 
-var long_alloc_buffer: [8192]u8 = undefined;
+var long_alloc_buffer: [16384]u8 = undefined;
 var long_fba = FBA.init(&long_alloc_buffer);
 const long_alloc = long_fba.allocator();
 

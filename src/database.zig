@@ -50,6 +50,8 @@ pub fn init(alloc: std.mem.Allocator) !@This() {
             playerIndex = i;
             player_count += 1;
             if (debug) w4.tracef("[db.init] Player spawn at (%d %d)", entity.vec[0], entity.vec[1]);
+        } else {
+            if (debug) w4.tracef("[db.init] Entity %d, (%d, %d) - %s", i, entity.vec[0], entity.vec[1], @tagName(entity.kind).ptr);
         }
     }
     if (debug and player_count == 0) w4.tracef("[db.init] NO PLAYER FOUND");
@@ -62,9 +64,10 @@ pub fn init(alloc: std.mem.Allocator) !@This() {
     i = 0;
     while (i < room_count) : (i += 1) {
         rooms[i] = try world.Room.readHeader(reader);
+        const room = rooms[i];
         const tiles_start = @intCast(usize, try cursor.getPos());
         const len = @intCast(usize, rooms[i].size[0]) * @intCast(usize, rooms[i].size[1]);
-        if (debug) w4.tracef("[db.init] Room %d: tiles_start=%d, len=%d", i, tiles_start, len);
+        if (debug) w4.tracef("[db.init] Room %d: (%d, %d, %d, %d), tiles_start=%d, len=%d", i, room.coord[0], room.coord[1], room.size[0], room.size[1], tiles_start, len);
         rooms[i].tiles = world_data[tiles_start .. tiles_start + len];
         try cursor.seekTo(tiles_start + len);
     }
@@ -76,17 +79,25 @@ pub fn init(alloc: std.mem.Allocator) !@This() {
     var room_lookup = try alloc.alloc(u16, room_count);
     var room_entities = try alloc.alloc([]world.Entity, room_count);
     for (rooms) |room, roomidx| {
-        var start: ?usize = 0;
+        var start: ?usize = null;
         room_lookup[roomidx] = room.toID();
-        for (entities) |entity, idx| {
-            if (start == null and room.contains(entity.toVec())) {
-                start = idx;
+        entity_loop: for (entities) |entity, idx| {
+            if (start) |s| {
+                if (!room.contains(entity.toVec())) {
+                    room_entities[roomidx] = entities[s..idx];
+                    break :entity_loop;
+                }
+            } else {
+                if (start == null and room.contains(entity.toVec())) {
+                    start = idx;
+                }
             }
-            const s = start orelse continue;
-            if (!room.contains(entity.toVec())) {
-                room_entities[roomidx] = entities[s..idx];
-                break;
-            }
+        } else if (start) |s| {
+            if (debug) w4.tracef("[db.init] Entities at end of list", roomidx);
+            room_entities[roomidx] = entities[s..];
+        } else {
+            if (debug) w4.tracef("[db.init] No entities in room %d", roomidx);
+            room_entities[roomidx] = entities[0..1];
         }
     }
 
@@ -107,14 +118,16 @@ pub fn getSpawn(db: Database) ?world.Entity {
 pub fn getRoomContaining(db: Database, coord: geom.Vec2) ?world.Room {
     if (debug) w4.tracef("[db.getRoomContaining] (%d, %d)", coord[0], coord[1]);
     for (db.room_data) |room| {
+        if (debug) w4.tracef("[db.getRoomContaining] Checking (%d, %d)", room.coord[0], room.coord[1]);
         if (room.contains(coord)) return room;
     }
     return null;
 }
 
 pub fn getRoomEntities(db: Database, room: world.Room) ?[]world.Entity {
+    const roomID = room.toID();
     for (db.room_lookup) |id, i| {
-        if (room.toID() == id) {
+        if (roomID == id) {
             return db.room_entities[i];
         }
     }
