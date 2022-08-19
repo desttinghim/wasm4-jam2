@@ -14,7 +14,7 @@ last_pos: geom.Vec2f,
 collisionBox: geom.AABBf,
 friction: f32 = 0.9,
 body: Body = .Rigid,
-facing: geom.Direction = .Left,
+facing: geom.Direction = .West,
 
 // True if actor is attempting to move
 motive: bool = false,

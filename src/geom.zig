@@ -6,25 +6,54 @@ pub const Vec2f = @Vector(2, f32);
 pub const Vec2 = @Vector(2, i32);
 
 pub const Direction = enum {
-    Down,
-    Left,
-    Right,
-    Up,
+    North,
+    Northwest,
+    West,
+    Southwest,
+    South,
+    Southeast,
+    East,
+    Northeast,
+    pub fn fromVec2f(dir: Vec2f) ?Direction {
+        const directions = [_]Direction{
+            .North,
+            .Northwest,
+            .West,
+            .Southwest,
+            .South,
+            .Southeast,
+            .East,
+            .Northeast,
+        };
+        const n = vec2.normalizef(dir);
+        for (directions) |direction| {
+            if (vec2.dot(direction.getVec2f(), n) > 0.8) return direction;
+        }
+        return null;
+    }
     pub fn getVec2(this: @This()) Vec2 {
         return switch (this) {
-            .Up => .{ 0, -1 },
-            .Left => .{ -1, 0 },
-            .Right => .{ 1, 0 },
-            .Down => .{ 0, 1 },
+            .North => Vec2{ 0, -1 },
+            .Northwest => Vec2{ -1, -1 },
+            .West => Vec2{ -1, 0 },
+            .Southwest => Vec2{ -1, 1 },
+            .South => Vec2{ 0, 1 },
+            .Southeast => Vec2{ 1, 1 },
+            .East => Vec2{ 1, 0 },
+            .Northeast => Vec2{ 1, -1 },
         };
     }
     pub fn getVec2f(this: @This()) Vec2f {
-        return switch (this) {
-            .Up => .{ 0, -1 },
-            .Left => .{ -1, 0 },
-            .Right => .{ 1, 0 },
-            .Down => .{ 0, 1 },
-        };
+        return vec2.normalizef(switch (this) {
+            .North => Vec2f{ 0, -1 },
+            .Northwest => Vec2f{ -1, -1 },
+            .West => Vec2f{ -1.0, 0.0 },
+            .Southwest => Vec2f{ -1, 1 },
+            .South => Vec2f{ 0, 1 },
+            .Southeast => Vec2f{ 1, 1 },
+            .East => Vec2f{ 1, 0 },
+            .Northeast => Vec2f{ 1, -1 },
+        });
     }
 };
 

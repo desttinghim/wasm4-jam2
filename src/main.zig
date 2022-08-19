@@ -223,25 +223,19 @@ fn update_safe() !void {
         var player = &actors.items[playerIndex];
         player.motive = false;
         const speed: f32 = 40.0 / 60.0;
+        var input_vector = geom.Vec2f{ 0, 0 };
+
+        if (input.btn(.one, .up)) input_vector += geom.Vec2f{ 0, -1 };
+        if (input.btn(.one, .left)) input_vector += geom.Vec2f{ -1, 0 };
+        if (input.btn(.one, .right)) input_vector += geom.Vec2f{ 1, 0 };
+        if (input.btn(.one, .down)) input_vector += geom.Vec2f{ 0, 1 };
+
+        input_vector = geom.vec2.normalizef(input_vector);
+
         if (!player_combat.is_attacking) {
-            if (input.btn(.one, .up)) {
-                player.facing = .Up;
-                player.pos[1] -= speed;
-                player.motive = true;
-            }
-            if (input.btn(.one, .left)) {
-                player.facing = .Left;
-                player.pos[0] -= speed;
-                player.motive = true;
-            }
-            if (input.btn(.one, .right)) {
-                player.facing = .Right;
-                player.pos[0] += speed;
-                player.motive = true;
-            }
-            if (input.btn(.one, .down)) {
-                player.facing = .Down;
-                player.pos[1] += speed;
+            if (geom.Direction.fromVec2f(input_vector)) |facing| {
+                player.facing = facing;
+                player.pos += @splat(2, speed) * input_vector;
                 player.motive = true;
             }
             if (player.motive and player_combat.is_attacking) player_combat.endAttack();
@@ -250,24 +244,15 @@ fn update_safe() !void {
             player.pos += player.facing.getVec2f() * @splat(2, speed);
             try hurtboxes.append(.{ .key = playerIndex, .val = geom.rect.shiftf(player_combat.getHurtbox(), player.pos) });
         } else {
+            if (geom.Direction.fromVec2f(input_vector)) |facing| {
+                player.facing = facing;
+            }
             if (input.btnp(.one, .z)) player_combat.startAttack(time);
             if (time - player_combat.last_attacking > 45) player_combat.endAttack();
         }
 
-        // // Collision
-        // const as_rectf = geom.aabb.as_rectf;
-        // const addvf = geom.aabb.addvf;
-        // const hcols = collide(playerIndex, as_rectf(addvf(player.collisionBox, geom.Vec2f{ player.pos[0], player.last_pos[1] })));
-        // const vcols = collide(playerIndex, as_rectf(addvf(player.collisionBox, geom.Vec2f{ player.last_pos[0], player.pos[1] })));
-        // if (hcols.len > 0) player.pos[0] = player.last_pos[0];
-        // if (vcols.len > 0) player.pos[1] = player.last_pos[1];
-
-        // // Kinematics
-        // const velocity = (player.pos - player.last_pos) * @splat(2, @as(f32, 0.5));
-        // player.last_pos = player.pos;
-        // player.pos += velocity;
-
         {
+            // Camera
             camera = player.pos - geom.Vec2f{ 80, 80 };
             const bounds = geom.aabb.as_rectf(geom.aabb.itof(room.toAABB() * @splat(4, world.tile_size[0])));
             if (camera[0] < bounds[0]) camera[0] = bounds[0];
@@ -304,26 +289,27 @@ fn update_safe() !void {
             }
         }
 
+        // Animation
         var animator = player_combat.animator;
         if (player.motive and animator.interruptable) {
-            if (player.facing == .Up) animator.play(&world.player_anim_walk_up);
-            if (player.facing == .Down) animator.play(&world.player_anim_walk_down);
-            if (player.facing == .Left) {
-                player.image.flags.flip_x = true;
-                animator.play(&world.player_anim_walk_side);
-            }
-            if (player.facing == .Right) {
-                player.image.flags.flip_x = false;
-                animator.play(&world.player_anim_walk_side);
+            switch (player.facing) {
+                .Northwest, .Northeast, .North => animator.play(&world.player_anim_walk_up),
+                .Southwest, .Southeast, .South => animator.play(&world.player_anim_walk_down),
+                .West => {
+                    player.image.flags.flip_x = true;
+                    animator.play(&world.player_anim_walk_side);
+                },
+                .East => {
+                    player.image.flags.flip_x = false;
+                    animator.play(&world.player_anim_walk_side);
+                },
             }
         } else {
             if (!player_combat.is_attacking) {
-                if (player.facing == .Down) {
-                    animator.play(&world.player_anim_stand_down);
-                } else if (player.facing == .Left or player.facing == .Right) {
-                    animator.play(&world.player_anim_stand_side);
-                } else {
-                    animator.play(&world.player_anim_stand_up);
+                switch (player.facing) {
+                    .Northwest, .Northeast, .North => animator.play(&world.player_anim_stand_up),
+                    .Southwest, .Southeast, .South => animator.play(&world.player_anim_stand_down),
+                    .West, .East => animator.play(&world.player_anim_stand_side),
                 }
             }
         }
@@ -422,7 +408,7 @@ fn update_safe() !void {
                 if (time - startTime > h.val.stunTime) {
                     h.val.stunned = null;
                 }
-                if (time % 30 < 10){
+                if (time % 10 < 4) {
                     continue :addRenderableActor;
                 }
             }
@@ -466,8 +452,8 @@ fn update_safe() !void {
             if (geom.rect.overlapsf(hurtbox.val, hitbox.val)) {
                 for (health) |*h| {
                     if (h.key != hitbox.key) continue;
-                    if (h.val.stunned) |_| break; {
-                    }
+                    if (h.val.stunned) |_| break;
+                    {}
                     h.val.current -|= 1;
                     h.val.stunned = time;
                     if (h.val.current == 0) {

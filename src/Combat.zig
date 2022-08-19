@@ -25,7 +25,7 @@ pub fn endAttack(this: *Combat) void {
     this.is_attacking = false;
     this.actor.image = this.actorImage;
     this.actor.offset = this.actorOffset;
-    this.actor.image.flags.flip_x = this.actor.facing == .Left;
+    this.actor.image.flags.flip_x = this.actor.facing == .West;
     // Arrest momentum
     this.actor.last_pos = this.actor.pos;
     this.actor.friction = 0.5;
@@ -37,17 +37,17 @@ pub fn getHurtbox(this: Combat) geom.Rectf {
     // This will be called after startAttack, so last_attack == 0 is flipped
     if (this.last_attack == 0) {
         return switch (this.actor.facing) {
-            .Up => .{ -4, -20, 13, 10 },
-            .Left => .{ -16, -10, 12, 11 },
-            .Right => .{ 4, -10, 12, 11 },
-            .Down => .{ -4, 0, 12, 12 },
+            .North => .{ -4, -20, 13, 10 },
+            .West, .Northwest, .Southwest => .{ -16, -10, 12, 11 },
+            .East, .Northeast, .Southeast => .{ 4, -10, 12, 11 },
+            .South => .{ -4, 0, 12, 12 },
         };
     } else {
         return switch (this.actor.facing) {
-            .Up => .{ -7, -20, 13, 10 },
-            .Left => .{ -16, -10, 12, 11 },
-            .Right => .{ 4, -10, 12, 11 },
-            .Down => .{ -8, 0, 12, 12 },
+            .Northwest, .Northeast, .North => .{ -7, -20, 13, 10 },
+            .West => .{ -16, -10, 12, 11 },
+            .East => .{ 4, -10, 12, 11 },
+            .Southwest, .Southeast, .South => .{ -8, 0, 12, 12 },
         };
     }
 }
@@ -62,13 +62,13 @@ pub fn startAttack(this: *Combat, now: usize) void {
     }
     this.actor.image = this.image;
     this.actor.offset = this.offset;
-    if (this.actor.facing == .Down) {
+    if (this.actor.facing == .South) {
         this.animator.play(this.punch_down[this.last_attack]);
-    } else if (this.actor.facing == .Up) {
+    } else if (this.actor.facing == .North) {
         this.animator.play(this.punch_up[this.last_attack]);
     } else {
         this.animator.play(this.punch_side[this.last_attack]);
-        this.actor.image.flags.flip_x = this.actor.facing == .Left;
+        this.actor.image.flags.flip_x = this.actor.facing == .West or this.actor.facing == .Northwest or this.actor.facing == .Southwest;
     }
     this.is_attacking = true;
     this.last_attacking = now;
