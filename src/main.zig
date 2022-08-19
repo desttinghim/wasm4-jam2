@@ -10,7 +10,7 @@ const Database = @import("database.zig");
 
 const builtin = @import("builtin");
 const debug = builtin.mode == .Debug;
-const verbosity = 0;
+const verbosity = 1;
 // const debug = false;
 
 const FBA = std.heap.FixedBufferAllocator;
@@ -169,12 +169,12 @@ fn loadRoom() !void {
     health = try level_alloc.alloc(Assoc(Health), needs_health);
 
     if (debug and verbosity > 0) w4.tracef("[start] Anim count %d", needs_animator);
-    // Add animator components
+    // Add components
     var anim_idx: usize = 0;
     var health_idx: usize = 0;
     for (actors.items) |actor, a| {
         if (actor.kind == .Player) {
-            animators[anim_idx] = .{ .key = anim_idx, .val = .{
+            animators[anim_idx] = .{ .key = a, .val = .{
                 .anim = &world.player_anim_walk_down,
             } };
             player_combat.animator = &animators[anim_idx].val;
@@ -182,7 +182,7 @@ fn loadRoom() !void {
             anim_idx += 1;
         }
         if (actor.kind == .Pot) {
-            health[health_idx] = .{ .key = health_idx, .val = .{
+            health[health_idx] = .{ .key = a, .val = .{
                 .max = 2,
                 .current = 2,
                 .stunTime = 60,
@@ -415,6 +415,15 @@ fn update_safe() !void {
     var to_remove = std.ArrayList(usize).init(alloc);
     defer to_remove.deinit();
 
+    // Update health
+    for (health) |*h| {
+        if (h.val.stunned) |startTime| {
+            if (time - startTime > h.val.stunTime) {
+                h.val.stunned = null;
+            }
+        }
+    }
+
     // Resolve hitbox/hurtbox collisions
     for (hitboxes.items) |hitbox| {
         for (hurtboxes.items) |hurtbox| {
@@ -423,7 +432,7 @@ fn update_safe() !void {
                 for (health) |*h| {
                     if (h.key != hitbox.key) continue;
                     if (h.val.stunned) |_| break;
-                    h.val.current -|= 1;
+                    h.val.current -= 1;
                     h.val.stunned = time;
                     if (h.val.current == 0) {
                         try to_remove.append(h.key);
@@ -439,12 +448,37 @@ fn update_safe() !void {
     // Remove actors in reverse
     var new_collectables = try alloc.alloc([2]geom.Vec2f, collectables.len + to_remove.items.len);
 
+    if (debug and verbosity > 0 and input.btnp(.one, .x)) {
+        for (health) |h, i| {
+            w4.tracef("[debug] health %d, key=%d", i, h.key);
+        }
+        for (actors.items) |a, i| {
+            w4.tracef("[debug] actor %d, kind=%s", i, @tagName(a.kind).ptr);
+        }
+    }
+
     var collectCount: usize = 0;
     if (debug and verbosity > 1 and to_remove.items.len > 0) w4.tracef("[remove] start");
     while (to_remove.popOrNull()) |remove| {
         // Remove destroyed items
         if (debug and verbosity > 1) w4.tracef("[remove] %d of %d", remove, actors.items.len);
         const actor = actors.swapRemove(remove);
+        for (health) |h, i| {
+            if (h.key == remove) {
+                if (i != health.len - 1) {
+                    std.mem.swap(Assoc(Health), &health[i], &health[health.len-1]);
+                }
+                health = health[0..health.len-1];
+                if (debug and verbosity > 0) w4.tracef("[remove] remove health %d, remove=%d, key=%d", i, remove, h.key);
+                if (debug and verbosity > 0) w4.tracef("[remove] health_len=%d", health.len);
+                break;
+            }
+        }
+        for (health) |h, i| {
+            if (h.key == actors.items.len) {
+                health[i].key = remove;
+            }
+        }
         // Add their position to collectables
         new_collectables[collectCount] = .{ actor.pos, actor.last_pos };
         collectCount += 1;
@@ -529,10 +563,7 @@ fn render(alloc: std.mem.Allocator) !void {
     addRenderableActor: for (actors.items) |*actor, idx| {
         for (health) |*h| {
             if (h.key != idx) continue;
-            if (h.val.stunned) |startTime| {
-                if (time - startTime > h.val.stunTime) {
-                    h.val.stunned = null;
-                }
+            if (h.val.stunned) |_| {
                 if (time % 10 < 4) {
                     continue :addRenderableActor;
                 }

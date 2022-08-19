@@ -434,10 +434,8 @@ pub const rect = struct {
     }
 
     pub fn overlapsf(rect1: Rectf, rect2: Rectf) bool {
-        return rect1[0] < rect2[2] and
-            rect1[2] > rect2[0] and
-            rect1[1] < rect2[3] and
-            rect1[3] > rect2[1];
+        return (rect1[0] <= rect2[2] and rect1[2] >= rect2[0]) and
+            (rect1[1] <= rect2[3] and rect1[3] >= rect2[1]);
     }
 
     pub fn shiftf(rectangle: Rectf, vector: Vec2f) Rectf {

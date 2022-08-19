@@ -33,7 +33,7 @@ pub fn getAABB(this: Actor) geom.AABBf {
 }
 
 pub fn getRect(this: Actor) geom.Rectf {
-    return geom.aabb.as_rectf(geom.aabb.addvf(this.collisionBox, this.pos));
+    return geom.aabb.as_rectf(this.getAABB());
 }
 
 pub fn compare(ctx: void, a: *const Actor, b: *const Actor) bool {
