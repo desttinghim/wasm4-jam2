@@ -218,7 +218,7 @@ pub const Room = struct {
 
     // Grid coordinates
     pub fn contains(room: Room, coord: geom.Vec2) bool {
-        const rect = geom.aabb.as_rect(geom.aabb.initv(room.toVec2(), geom.Vec2{ room.size[0], room.size[1] }));
+        const rect = geom.aabb.as_rect(geom.aabb.initv(room.toVec2(), geom.Vec2{ room.size[0] - 1, room.size[1] - 1 }));
         return (geom.rect.contains(rect, coord));
     }
 

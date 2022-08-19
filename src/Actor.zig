@@ -35,5 +35,5 @@ pub fn compare(ctx: void, a: *const Actor, b: *const Actor) bool {
 }
 
 pub fn toGrid(this: Actor) geom.Vec2 {
-    return geom.vec2.ftoi(this.pos / world.tile_sizef);
+    return geom.vec2.ftoi(@divFloor(this.pos, world.tile_sizef));
 }

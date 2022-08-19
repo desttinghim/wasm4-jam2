@@ -312,7 +312,7 @@ pub const rect = struct {
     }
 
     pub fn contains(rectangle: Rect, vector: Vec2) bool {
-        return @reduce(.And, top_left(rectangle) < vector) and
+        return @reduce(.And, top_left(rectangle) <= vector) and
             @reduce(.And, bottom_right(rectangle) >= vector);
     }
 
@@ -370,7 +370,7 @@ pub const rect = struct {
     }
 
     pub fn containsf(rectangle: Rectf, vector: Vec2f) bool {
-        return @reduce(.And, top_leftf(rectangle) < vector) and @reduce(.And, bottom_rightf(rectangle) > vector);
+        return @reduce(.And, top_leftf(rectangle) <= vector) and @reduce(.And, bottom_rightf(rectangle) >= vector);
     }
 
     pub fn overlapsf(rect1: Rectf, rect2: Rectf) bool {

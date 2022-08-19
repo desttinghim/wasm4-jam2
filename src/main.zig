@@ -314,25 +314,28 @@ fn update_safe() !void {
             if (camera[1] + 160 > bounds[3]) camera[1] = bounds[3] - 160;
 
             const size = geom.aabb.sizef(player.collisionBox);
-            if (player.pos[0] - size[0] / 2 < bounds[0]) {
-                player.pos[0] = bounds[0] - size[0] / 2;
-                player.last_pos = player.pos;
+            const left = (player.pos[0] < bounds[0] + size[0]);
+            const up = (player.pos[1] - size[1] < bounds[1]);
+            const right = (player.pos[0] > bounds[2] - size[0]);
+            const down = (player.pos[1] > bounds[3]);
+            if (left or up or right or down) {
                 next_room = db.getRoomContaining(player.toGrid());
             }
-            if (player.pos[1] - size[1] < bounds[1]) {
-                player.pos[1] = bounds[1] - size[1];
+            if (next_room != null and left) {
+                player.pos[0] = bounds[0] - size[0];
                 player.last_pos = player.pos;
-                next_room = db.getRoomContaining(player.toGrid());
             }
-            if (player.pos[0] + size[0] / 2 > bounds[2]) {
-                player.pos[0] = bounds[2] + size[0] / 2;
+            if (next_room != null and up) {
+                player.pos[1] = bounds[1] - 1;
                 player.last_pos = player.pos;
-                next_room = db.getRoomContaining(player.toGrid());
             }
-            if (player.pos[1] > bounds[3]) {
+            if (next_room != null and right) {
+                player.pos[0] = bounds[2] + size[0] * 1.5;
+                player.last_pos = player.pos;
+            }
+            if (next_room != null and down) {
                 player.pos[1] = bounds[3] + 16;
                 player.last_pos = player.pos;
-                next_room = db.getRoomContaining(player.toGrid());
             }
         }
 
