@@ -9,9 +9,9 @@ const Anim = @import("Anim.zig");
 const Database = @import("database.zig");
 
 const builtin = @import("builtin");
-const debug = builtin.mode == .Debug;
-const verbosity = 2;
-// const debug = false;
+// const debug = builtin.mode == .Debug;
+const verbosity = 0;
+const debug = false;
 
 const FBA = std.heap.FixedBufferAllocator;
 
@@ -61,6 +61,7 @@ var bounds: geom.Rectf = undefined;
 var camera = geom.Vec2f{ 0, 0 };
 var camera_player_pos = geom.Vec2f{ 0, 0 };
 var playerStore: Actor = undefined;
+var heart_count: usize = 0;
 
 var actors: std.ArrayList(Actor) = undefined;
 var collectables: [][2]geom.Vec2f = &.{};
@@ -260,7 +261,11 @@ fn update_safe() !void {
         if (!player_combat.is_attacking) {
             player.move(input_vector);
             if (player.motive and player_combat.is_attacking) player_combat.endAttack();
-            if (input.btnp(.one, .z)) player_combat.startAttack(time);
+            if (input.btnp(.one, .z)) {
+                player_combat.startAttack(time);
+                // TODO: manage sound effects in one place
+                w4.tone(120 | 0 << 16, 0 | 16 << 8 | 0 << 16 | 2 << 24, 38, 0x03);
+            }
         } else if (!player_combat.animator.interruptable) {
             player.move(player.facing.getVec2f());
         } else {
@@ -268,7 +273,11 @@ fn update_safe() !void {
                 player.facing = facing;
             }
             const delta = time - player_combat.last_attacking;
-            if (delta > 25 and input.btnp(.one, .z)) player_combat.startAttack(time);
+            if (delta > 25 and input.btnp(.one, .z)) {
+                player_combat.startAttack(time);
+                // TODO: manage sound effects in one place
+                w4.tone(120 + player_combat.chain | 0 << 16, 0 | 16 << 8 | 0 << 16 | 2 << 24, 38, 0x03);
+            }
             if (delta > 40) player_combat.endAttack();
         }
 
@@ -482,8 +491,9 @@ fn update_safe() !void {
 
     for (collectables) |*collectable| {
         // Kinematics
-        collectable[0] = moveAndSlide(geom.rect.initvf(collectable[0] - geom.Vec2f{ 2, 2 }, .{ 4, 4 }), collectable[0], collectable[1], 0.5, 0.9);
-        collectable[1] = collectable[0];
+        const new_collectable = moveAndSlide(geom.rect.initvf(collectable[0] - geom.Vec2f{ 2, 2 }, .{ 4, 4 }), collectable[0], collectable[1], 2.0, 0.9);
+        collectable[0] = new_collectable[0];
+        collectable[1] = new_collectable[1];
     }
 
     // Store actors to remove
@@ -579,10 +589,15 @@ fn update_safe() !void {
             try to_remove.append(collectCount);
             // TODO: manage sound effects in one place
             w4.tone(0 | 210 << 16, 6 | 0 << 8 | 0 << 16 | 12 << 24, 15, 0x01);
+            heart_count += 1;
             continue;
-        } else if (dist < 16) {
+        } else if (dist < 32) {
             const towards = geom.vec2.normalizef(player - collectable[0]);
-            new_collectables[collectCount][0] += towards * @splat(2, @as(f32, 1.0));
+            const around = geom.vec2.perpendicularCWf(towards);
+            const bias = @splat(2, @as(f32, 2.0));
+            const spiral = geom.vec2.normalizef(towards * bias + around);
+            const speed = @splat(2, @as(f32, 1.0));
+            new_collectables[collectCount][0] += spiral * speed;
         }
         collectCount += 1;
     }
@@ -602,6 +617,8 @@ fn update_safe() !void {
     }
 
     try render(alloc);
+
+    renderUi();
 
     if (debug) {
         for (hitboxes.items) |hitbox| {
@@ -670,9 +687,13 @@ fn render(alloc: std.mem.Allocator) !void {
     for (draw_order.items) |renderable| {
         switch (renderable.kind) {
             .Actor => |actor| {
-                w4.DRAW_COLORS.* = 0x0044;
                 const aabb = geom.aabb.ftoi(geom.aabb.subvf(actor.getAABB(), camera));
-                w4.oval(aabb[0], aabb[1],  aabb[2],  aabb[3]);
+                w4.DRAW_COLORS.* = 0x0022;
+                w4.oval(aabb[0], aabb[1], aabb[2], aabb[3]);
+                if (actor.z >= 1) {
+                    w4.DRAW_COLORS.* = 0x0044;
+                    w4.oval(aabb[0] + 1, aabb[1] + 1, aabb[2] - 1, aabb[3] - 1);
+                }
 
                 const pos = geom.vec2.ftoi(actor.pos + actor.offset - camera);
                 actor.image.blit(pos - geom.Vec2{ 0, @floatToInt(i32, actor.z) });
@@ -689,6 +710,24 @@ fn render(alloc: std.mem.Allocator) !void {
     }
 }
 
+fn renderUi() void {
+    const heart_pos = geom.Vec2{ 160 - 48, 0 };
+
+    w4.DRAW_COLORS.* = 0x0111;
+    world.blit(heart_pos + geom.Vec2{ 1, 1 }, world.heart);
+    w4.DRAW_COLORS.* = 0x0234;
+    world.blit(heart_pos, world.heart);
+
+    const ones = @intCast(u8, heart_count % 10);
+    const tens = @intCast(u8, (heart_count / 10) % 10);
+    const hundreds = @intCast(u8, (heart_count / 100) % 10);
+    const heart_count_str = &[4:0]u8{ 'x', '0' + hundreds, '0' + tens, '0' + ones };
+    w4.DRAW_COLORS.* = 0x0001;
+    w4.textUtf8(heart_count_str, heart_count_str.len, heart_pos[0] + 17, heart_pos[1] + 5);
+    w4.DRAW_COLORS.* = 0x0004;
+    w4.textUtf8(heart_count_str, heart_count_str.len, heart_pos[0] + 16, heart_pos[1] + 4);
+}
+
 pub fn isSolid(tile: u8) bool {
     return (tile >= 1 and tile <= 6) or (tile >= 18 and tile <= 23 and tile != 19) or (tile >= 35 and tile <= 40) or (tile >= 55 and tile <= 57) or (tile >= 72 and tile <= 74);
 }
@@ -702,8 +741,9 @@ pub fn isInMapBounds(pos: geom.Vec2) bool {
     return pos[0] >= 0 and pos[1] >= 0 and pos[0] < room.size[0] and pos[1] < room.size[1];
 }
 
-pub fn moveAndSlide(rect: geom.Rectf, pos: geom.Vec2f, last_pos: geom.Vec2f, maxVelocity: f32, friction: f32) geom.Vec2f {
+pub fn moveAndSlide(rect: geom.Rectf, pos: geom.Vec2f, last_pos: geom.Vec2f, maxVelocity: f32, friction: f32) [2]geom.Vec2f {
     var new_pos = pos;
+    var new_last_pos = pos;
     const speed = geom.vec2.distf(new_pos, last_pos);
     const velocity = geom.vec2.normalizef(new_pos - last_pos) * @splat(2, @minimum(maxVelocity, speed * friction));
     new_pos += velocity;
@@ -714,12 +754,14 @@ pub fn moveAndSlide(rect: geom.Rectf, pos: geom.Vec2f, last_pos: geom.Vec2f, max
 
     if (hcols.len > 0) {
         new_pos[0] = last_pos[0];
+        new_last_pos[0] = new_pos[0] + velocity[0] * 0.5;
     }
     if (vcols.len > 0) {
         new_pos[1] = last_pos[1];
+        new_last_pos[1] = new_pos[1] + velocity[1] * 0.5;
     }
 
-    return new_pos;
+    return .{ new_pos, new_last_pos };
 }
 
 pub fn collideBodies(collisions: *std.ArrayList(usize), rect: geom.Rectf, which: usize) !void {
