@@ -23,6 +23,7 @@ motive: bool = false,
 bounced: bool = false,
 stunned: ?usize = null,
 stunPeriod: usize = 5,
+speed: f32 = 30.0 / 60.0,
 
 pub fn render(this: *Actor) void {
     const pos = geom.vec2.ftoi(this.pos + this.offset);
@@ -33,10 +34,9 @@ pub fn move(actor: *Actor, input_vector: geom.Vec2f) void {
     // Don't move when stunned
     if (actor.stunned != null) return;
     if (actor.isInAir()) return;
-    const speed: f32 = 30.0 / 60.0;
     if (geom.Direction.fromVec2f(input_vector)) |facing| {
         actor.facing = facing;
-        actor.pos += @splat(2, speed) * input_vector;
+        actor.pos += @splat(2, actor.speed) * input_vector;
         actor.motive = true;
     }
 }

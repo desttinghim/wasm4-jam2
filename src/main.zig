@@ -99,6 +99,7 @@ fn start_safe() !void {
             .pos = pos,
             .last_pos = pos,
             .body = .Kinematic,
+            .speed = 45.0 / 60.0,
             .friction = 0.5,
             .collisionBox = geom.AABBf{ -4, -4, 8, 8 },
             .offset = geom.Vec2f{ -8, -12 },
