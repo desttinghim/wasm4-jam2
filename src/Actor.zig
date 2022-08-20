@@ -12,12 +12,14 @@ offset: geom.Vec2f,
 pos: geom.Vec2f,
 last_pos: geom.Vec2f,
 collisionBox: geom.AABBf,
-friction: f32 = 0.9,
+friction: f32 = 0.8,
 body: Body = .Rigid,
 facing: geom.Direction = .West,
 
 // True if actor is attempting to move
 motive: bool = false,
+stunned: ?usize = null,
+stunPeriod: usize = 30,
 
 pub fn render(this: *Actor) void {
     const pos = geom.vec2.ftoi(this.pos + this.offset);
@@ -25,12 +27,20 @@ pub fn render(this: *Actor) void {
 }
 
 pub fn move(actor: *Actor, input_vector: geom.Vec2f) void {
+    // Don't move when stunned
+    if (actor.stunned != null) return;
     const speed: f32 = 30.0 / 60.0;
     if (geom.Direction.fromVec2f(input_vector)) |facing| {
         actor.facing = facing;
         actor.pos += @splat(2, speed) * input_vector;
         actor.motive = true;
     }
+}
+
+pub fn stun(actor: *Actor, time: usize) void {
+    actor.stunned = time;
+    actor.motive = false;
+    actor.friction = 0.85;
 }
 
 pub fn isMoving(this: Actor) bool {

@@ -33,15 +33,14 @@ const frame_alloc: [2]std.mem.Allocator = .{
     frame_fba[1].allocator(),
 };
 
+// Associative array
+const Assoc = @import("assoc.zig").Assoc;
+
+// Components
 const Actor = @import("Actor.zig");
-const Renderable = @import("Renderable.zig");
 const Combat = @import("Combat.zig");
-const Health = struct {
-    max: u8,
-    current: u8,
-    stunned: ?usize = null,
-    stunTime: usize = 20,
-};
+const Health = @import("Health.zig");
+const Renderable = @import("Renderable.zig");
 const Intelligence = @import("Intelligence.zig");
 
 const player_blit = draw.Blit.init_frame(world.player_style, &world.player_bmp, .{ .bpp = .b2 }, .{ 16, 16 }, 0);
@@ -58,6 +57,7 @@ var player_combat = Combat{
     .punch_up = .{ &world.player_anim_punch_up, &world.player_anim_punch_up2 },
     .punch_side = .{ &world.player_anim_punch_side, &world.player_anim_punch_side2 },
 };
+var bounds: geom.Rectf = undefined;
 var camera = geom.Vec2f{ 0, 0 };
 var camera_player_pos = geom.Vec2f{ 0, 0 };
 var playerStore: Actor = undefined;
@@ -69,10 +69,6 @@ var health: []Assoc(Health) = undefined;
 var intelligences: []Assoc(Intelligence) = undefined;
 
 var db: Database = undefined;
-
-fn Assoc(comptime T: type) type {
-    return struct { key: usize, val: T };
-}
 
 var room: world.Room = undefined;
 
@@ -87,25 +83,6 @@ export fn start() void {
 }
 
 fn start_safe() !void {
-    // https://lospec.com/palette-list/crimson
-    // CRIMSON
-    // by WilLeoKnight
-    // w4.PALETTE.* = .{ 0xeff9d6, 0xba5044, 0x7a1c4b, 0x1b0326 };
-
-    // https://lospec.com/palette-list/space-icecream
-    // SPACE ICECREAM
-    // by Rexsarus
-    // w4.PALETTE.* = .{ 0xfffed6, 0xffabab, 0x644666, 0x100221 };
-
-    // https://lospec.com/palette-list/space-icecream
-    // Kirokaze GB
-    // by Kirokaze
-    // w4.PALETTE.* = .{ 0xe2f3e4, 0x94e344, 0x46878f, 0x332c50 };
-
-    // Default
-    // WASM-4
-    // w4.PALETTE.* = .{ 0xe0f8cf, 0x86c06c, 0x306850, 0x071821 };
-
     w4.PALETTE.* = .{ 0xe0f8cf, 0x86c06c, 0x644666, 0x100221 };
 
     db = try Database.init(long_alloc);
@@ -218,14 +195,14 @@ fn loadRoom() !void {
                     .stunTime = 60,
                 } };
                 health_idx += 1;
-                intelligences[intelligence_idx] = .{ .key = a, .val = .{.follow_player = true} };
+                intelligences[intelligence_idx] = .{ .key = a, .val = .{ .follow_player = true } };
                 intelligence_idx += 1;
             },
         }
     }
 
     // Update camera
-    const bounds = geom.aabb.as_rectf(geom.aabb.itof(room.toAABB() * @splat(4, world.tile_size[0])));
+    bounds = geom.aabb.as_rectf(geom.aabb.itof(room.toAABB() * @splat(4, world.tile_size[0])));
     var new_camera = actors.items[playerIndex].pos - geom.Vec2f{ 80, 80 };
     if (new_camera[0] < bounds[0]) new_camera[0] = bounds[0];
     if (new_camera[1] < bounds[1]) new_camera[1] = bounds[1];
@@ -262,11 +239,21 @@ fn update_safe() !void {
 
     var next_room: ?world.Room = null;
 
+    // Actor update
+    for (actors.items) |*actor| {
+        actor.motive = false;
+        if (actor.stunned) |stunTime| {
+            if (time - stunTime > actor.stunPeriod) {
+                actor.stunned = null;
+                actor.friction = 0.5;
+            }
+        }
+    }
+
     // Update player
     {
         // Input
         var player = &actors.items[playerIndex];
-        player.motive = false;
         var input_vector = geom.Vec2f{ 0, 0 };
 
         if (input.btn(.one, .up)) input_vector += geom.Vec2f{ 0, -1 };
@@ -281,7 +268,7 @@ fn update_safe() !void {
             if (player.motive and player_combat.is_attacking) player_combat.endAttack();
             if (input.btnp(.one, .z)) player_combat.startAttack(time);
         } else if (!player_combat.animator.interruptable) {
-            // player.pos += player.facing.getVec2f() * @splat(2, speed);
+            player.move(player.facing.getVec2f());
         } else {
             if (geom.Direction.fromVec2f(input_vector)) |facing| {
                 player.facing = facing;
@@ -294,14 +281,17 @@ fn update_safe() !void {
         for (intelligences) |*intAssoc| {
             const intelligence = &intAssoc.val;
             const actor = &actors.items[intAssoc.key];
+            // TODO
             if (actor.kind != .Skeleton) continue;
             const player_dir = geom.vec2.normalizef(player.pos - actor.pos);
             const view = geom.vec2.dot(player_dir, actor.facing.getVec2f());
             if (view > 0.5) {
                 intelligence.player_in_view = true;
+            } else {
+                intelligence.player_in_view = false;
             }
             if (intelligence.player_in_view and intelligence.follow_player) {
-                if ( geom.vec2.distf(actor.pos, player.pos) > intelligence.approach_distance) {
+                if (geom.vec2.distf(actor.pos, player.pos) > intelligence.approach_distance) {
                     actor.move(player_dir);
                 } else {
                     actor.facing = geom.Direction.fromVec2f(player_dir) orelse actor.facing;
@@ -311,7 +301,6 @@ fn update_safe() !void {
 
         {
             // Camera
-            const bounds = geom.aabb.as_rectf(geom.aabb.itof(room.toAABB() * @splat(4, world.tile_size[0])));
             const centered_camera = player.pos - geom.Vec2f{ 80, 80 };
             var move_dist = geom.vec2.distf(player.pos, camera_player_pos);
             const scale = @minimum(1.0, move_dist / 40);
@@ -393,29 +382,14 @@ fn update_safe() !void {
         if (actor.body != .Rigid) continue;
         const as_rectf = geom.aabb.as_rectf;
         const addvf = geom.aabb.addvf;
-        const hcols = collide(actorIndex, as_rectf(addvf(actor.collisionBox, geom.Vec2f{ actor.pos[0], actor.last_pos[1] })));
-        const vcols = collide(actorIndex, as_rectf(addvf(actor.collisionBox, geom.Vec2f{ actor.last_pos[0], actor.pos[1] })));
-        var allcols = try std.ArrayList(usize).initCapacity(alloc, 9);
-
-        for (hcols.iterWhich()) |which| {
-            if (which != .body) continue;
-            try allcols.append(which.body);
-        }
-        vcol: for (vcols.iterWhich()) |which| {
-            if (which != .body) continue;
-            for (allcols.items) |which2| {
-                if (which.body == which2) continue :vcol;
-            }
-            try allcols.append(which.body);
-        }
+        const allcols = collide(actorIndex, as_rectf(addvf(actor.collisionBox, actor.pos)));
 
         var velocity = (actor.pos - actor.last_pos) * @splat(2, @as(f32, actor.friction));
-        for (allcols.items) |body| {
-            const other = &actors.items[body];
+        for (allcols.iterWhich()) |which| {
+            if (which != .body) continue;
+            const other = &actors.items[which.body];
             if (other.body == .Rigid) {
                 other.pos += velocity / @splat(2, @as(f32, 2));
-            } else {
-                actor.pos -= velocity / @splat(2, @as(f32, 2));
             }
         }
     }
@@ -493,6 +467,7 @@ fn update_safe() !void {
                     const max = geom.vec2.normalizef(add) * @splat(2, @as(f32, 4));
                     const vel = @minimum(max, add / @splat(2, @as(f32, 3)));
                     taker.pos += vel;
+                    taker.stun(time);
                     if (debug and verbosity > 1) w4.tracef("[hit] taker (%d, %d)", @floatToInt(i32, taker.pos[0]), @floatToInt(i32, taker.pos[1]));
                     if (debug and verbosity > 1) w4.tracef("[hit] hitter (%d, %d)", @floatToInt(i32, hitter.pos[0]), @floatToInt(i32, hitter.pos[1]));
                     if (debug and verbosity > 1) w4.tracef("[hit] velocity (%d, %d)", @floatToInt(i32, vel[0]), @floatToInt(i32, vel[1]));
@@ -519,38 +494,9 @@ fn update_safe() !void {
         // Remove destroyed items
         if (debug and verbosity > 1) w4.tracef("[remove] %d of %d", remove, actors.items.len);
         const actor = actors.swapRemove(remove);
-        for (health) |h, i| {
-            if (h.key == remove) {
-                if (i != health.len - 1) {
-                    std.mem.swap(Assoc(Health), &health[i], &health[health.len - 1]);
-                }
-                health = health[0 .. health.len - 1];
-                if (debug and verbosity > 0) w4.tracef("[remove] remove health %d, remove=%d, key=%d", i, remove, h.key);
-                if (debug and verbosity > 0) w4.tracef("[remove] health_len=%d", health.len);
-                break;
-            }
-        }
-        for (health) |h, i| {
-            if (h.key == actors.items.len) {
-                health[i].key = remove;
-            }
-        }
-        for (intelligences) |h, i| {
-            if (h.key == remove) {
-                if (i != intelligences.len - 1) {
-                    std.mem.swap(Assoc(Intelligence), &intelligences[i], &intelligences[intelligences.len - 1]);
-                }
-                intelligences = intelligences[0 .. intelligences.len - 1];
-                if (debug and verbosity > 0) w4.tracef("[remove] remove intelligences %d, remove=%d, key=%d", i, remove, h.key);
-                if (debug and verbosity > 0) w4.tracef("[remove] intelligences_len=%d", intelligences.len);
-                break;
-            }
-        }
-        for (intelligences) |h, i| {
-            if (h.key == actors.items.len) {
-                intelligences[i].key = remove;
-            }
-        }
+        health = Assoc(Health).swapRemove(health, remove, actors.items.len);
+        intelligences = Assoc(Intelligence).swapRemove(intelligences, remove, actors.items.len);
+
         // Add their position to collectables
         new_collectables[collectCount] = .{ actor.pos, actor.last_pos };
         collectCount += 1;
@@ -560,12 +506,12 @@ fn update_safe() !void {
         new_collectables[collectCount] = collectable;
         const player = actors.items[playerIndex].pos;
         const dist = geom.vec2.distf(collectable[0], player);
-        if (dist < 8) {
+        if (dist < 4) {
             try to_remove.append(collectCount);
             continue;
-        } else if (dist < 48) {
+        } else if (dist < 16) {
             const towards = geom.vec2.normalizef(player - collectable[0]);
-            new_collectables[collectCount][0] += towards * @splat(2, @as(f32, 2.0));
+            new_collectables[collectCount][0] += towards * @splat(2, @as(f32, 1.0));
         }
         collectCount += 1;
     }
@@ -663,7 +609,7 @@ fn render(alloc: std.mem.Allocator) !void {
             },
             .Particle => |p| {
                 w4.DRAW_COLORS.* = 0x0234;
-                world.blit(geom.vec2.ftoi(p) - camera_pos, world.heart);
+                world.blit(geom.vec2.ftoi(p) - camera_pos - geom.Vec2{ 8, 8 }, world.heart);
             },
         }
     }
@@ -674,8 +620,8 @@ pub fn isSolid(tile: u8) bool {
 }
 
 pub fn isInScreenBounds(pos: geom.Vec2) bool {
-    const bounds = geom.aabb.initv(.{room.toVec() * world.room_grid_size * world.tile_size}, @splat(2, @as(i32, w4.CANVAS_SIZE)));
-    return bounds.contains(pos);
+    const screen_bounds = geom.aabb.initv(.{room.toVec() * world.room_grid_size * world.tile_size}, @splat(2, @as(i32, w4.CANVAS_SIZE)));
+    return screen_bounds.contains(pos);
 }
 
 pub fn isInMapBounds(pos: geom.Vec2) bool {
