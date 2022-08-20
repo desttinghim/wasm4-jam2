@@ -5,29 +5,64 @@ const world = @import("world.zig");
 const Actor = @This();
 pub const Body = enum { Kinematic, Rigid, Static };
 
-kind: world.EntityKind,
-image: draw.Blit,
-offset: geom.Vec2f,
+pub const Template = struct {
+    kind: world.EntityKind,
+    offset: geom.Vec2f,
+    collisionBox: geom.AABBf,
+    body: Body = .Rigid,
+    stunPeriod: usize = 5,
+    speed: f32 = 30.0 / 60.0,
 
+    pub const Player = Template{
+        .kind = .Player,
+        .body = .Kinematic,
+        .speed = 45.0 / 60.0,
+        .collisionBox = geom.AABBf{ -4, -4, 8, 8 },
+        .offset = geom.Vec2f{ -8, -12 },
+    };
+
+    pub const PlayerAttack = Template{
+        .kind = .Player,
+        .body = .Kinematic,
+        .speed = 45.0 / 60.0,
+        .collisionBox = geom.AABBf{ -4, -4, 8, 8 },
+        .offset = geom.Vec2f{ -16, -20 },
+    };
+
+    pub const Pot = Template{
+        .kind = .Pot,
+        .collisionBox = geom.AABBf{ -3, -3, 6, 6 },
+        .offset = geom.Vec2f{ -8, -12 },
+    };
+
+    pub const Skeleton = Template{
+        .kind = .Skeleton,
+        .body = .Kinematic,
+        .collisionBox = geom.AABBf{ -3, -3, 6, 6 },
+        .offset = geom.Vec2f{ -8, -12 },
+    };
+};
+
+template: *const Template,
+
+image: draw.Blit,
 z: f32 = 0,
 last_z: f32 = 0,
 pos: geom.Vec2f,
 last_pos: geom.Vec2f,
-collisionBox: geom.AABBf,
 friction: f32 = 0.8,
-body: Body = .Rigid,
 facing: geom.Direction = .West,
 
-// True if actor is attempting to move
+/// True if actor is attempting to move
 motive: bool = false,
+/// True if the actor collided with after being in the air
 bounced: bool = false,
+/// True if the actor was hit
 stunned: ?usize = null,
-stunPeriod: usize = 5,
-speed: f32 = 30.0 / 60.0,
 
 pub fn render(this: *Actor) void {
-    const pos = geom.vec2.ftoi(this.pos + this.offset);
-    this.image.blit(pos);
+    const pos = geom.vec2.ftoi(this.pos + this.template.offset);
+    this.template.image.blit(pos);
 }
 
 pub fn move(actor: *Actor, input_vector: geom.Vec2f) void {
@@ -36,7 +71,7 @@ pub fn move(actor: *Actor, input_vector: geom.Vec2f) void {
     if (actor.isInAir()) return;
     if (geom.Direction.fromVec2f(input_vector)) |facing| {
         actor.facing = facing;
-        actor.pos += @splat(2, actor.speed) * input_vector;
+        actor.pos += @splat(2, actor.template.speed) * input_vector;
         actor.motive = true;
     }
 }
@@ -56,11 +91,11 @@ pub fn isMoving(this: Actor) bool {
 }
 
 pub fn getAABB(this: Actor) geom.AABBf {
-    return geom.aabb.addvf(this.collisionBox, this.pos);
+    return geom.aabb.addvf(this.template.collisionBox, this.pos);
 }
 
 pub fn getSize(this: Actor) geom.AABBf {
-    return geom.aabb.sizef(this.collisionBox);
+    return geom.aabb.sizef(this.template.collisionBox);
 }
 
 pub fn getRect(this: Actor) geom.Rectf {

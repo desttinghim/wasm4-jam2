@@ -14,7 +14,7 @@ kind: Kind,
 
 pub fn getPos(renderable: Renderable) geom.Vec2f {
     return switch (renderable.kind) {
-        .Actor => |a| a.pos + a.offset,
+        .Actor => |a| a.pos + a.template.offset,
         .Particle => |p| p,
     };
 }

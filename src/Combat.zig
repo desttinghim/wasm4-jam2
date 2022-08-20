@@ -13,9 +13,11 @@ last_attack: usize = 0,
 chain: u8 = 0,
 
 actorImage: draw.Blit,
-actorOffset: geom.Vec2f,
+// actorOffset: geom.Vec2f,
+actorTemplate: *const Actor.Template,
+template: *const Actor.Template,
+// offset: geom.Vec2f,
 image: draw.Blit,
-offset: geom.Vec2f,
 punch_down: [2][]const Anim.Ops,
 punch_up: [2][]const Anim.Ops,
 punch_side: [2][]const Anim.Ops,
@@ -24,12 +26,13 @@ pub fn endAttack(this: *Combat) void {
     this.chain = 0;
     this.is_attacking = false;
     this.actor.image = this.actorImage;
-    this.actor.offset = this.actorOffset;
+    this.actor.template = this.actorTemplate;
+    // this.actor.offset = this.actorOffset;
     this.actor.image.flags.flip_x = this.actor.facing == .West;
     // Arrest momentum
     this.actor.last_pos = this.actor.pos;
     this.actor.friction = 0.5;
-    this.actor.body = .Kinematic;
+    // this.actor.body = .Kinematic;
 }
 
 /// Relative to offset
@@ -61,7 +64,8 @@ pub fn startAttack(this: *Combat, now: usize) void {
         this.chain +|= 1;
     }
     this.actor.image = this.image;
-    this.actor.offset = this.offset;
+    this.actor.template = this.template;
+    // this.actor.offset = this.offset;
     if (this.actor.facing == .South) {
         this.animator.play(this.punch_down[this.last_attack]);
     } else if (this.actor.facing == .North) {

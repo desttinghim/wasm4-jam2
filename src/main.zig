@@ -4,8 +4,10 @@ const draw = @import("draw.zig");
 const geom = @import("geom.zig");
 const input = @import("input.zig");
 const world = @import("world.zig");
+const audio = @import("audio.zig");
 const Anim = @import("Anim.zig");
 
+var music_data = @embedFile(@import("world_data").music);
 const Database = @import("database.zig");
 
 const builtin = @import("builtin");
@@ -15,7 +17,7 @@ const debug = false;
 
 const FBA = std.heap.FixedBufferAllocator;
 
-var long_alloc_buffer: [8192]u8 = undefined;
+var long_alloc_buffer: [4096]u8 = undefined;
 var long_fba = FBA.init(&long_alloc_buffer);
 const long_alloc = long_fba.allocator();
 
@@ -48,10 +50,12 @@ const player_offset = geom.Vec2f{ -8, -12 };
 var playerIndex: usize = undefined;
 var player_combat = Combat{
     .actorImage = player_blit,
-    .actorOffset = player_offset,
+    .actorTemplate = &Actor.Template.Player,
+    .template = &Actor.Template.PlayerAttack,
+    // .actorOffset = player_offset,
     .actor = undefined,
     .animator = undefined,
-    .offset = geom.Vec2f{ -16, -20 },
+    // .offset = geom.Vec2f{ -16, -20 },
     .image = draw.Blit.init_frame(world.player_style, &world.player_punch_bmp, .{ .bpp = .b2 }, .{ 32, 32 }, 0),
     .punch_down = .{ &world.player_anim_punch_down, &world.player_anim_punch_down2 },
     .punch_up = .{ &world.player_anim_punch_up, &world.player_anim_punch_up2 },
@@ -64,12 +68,14 @@ var playerStore: Actor = undefined;
 var heart_count: usize = 0;
 
 var actors: std.ArrayList(Actor) = undefined;
+// var collectable_list: std.ArrayList([2]geom.Vec2f) = undefined;
 var collectables: [][2]geom.Vec2f = &.{};
 var animators: []Assoc(Anim) = undefined;
 var health: []Assoc(Health) = undefined;
 var intelligences: []Assoc(Intelligence) = undefined;
 
 var db: Database = undefined;
+var music: audio.music.Context = undefined;
 
 var room: world.Room = undefined;
 
@@ -87,6 +93,7 @@ fn start_safe() !void {
     w4.PALETTE.* = .{ 0xe0f8cf, 0x86c06c, 0x644666, 0x100221 };
 
     db = try Database.init(long_alloc);
+    music = try audio.music.Context.read(music_data);
 
     var spawn: world.Entity = db.getSpawn() orelse return error.PlayerNotFound;
     room = db.getRoomContaining(spawn.toVec()) orelse return error.RoomNotFound;
@@ -96,14 +103,10 @@ fn start_safe() !void {
         const tile_sizef = geom.vec2.itof(world.tile_size);
         const pos = spawn.toPos() + (tile_sizef / @splat(2, @as(f32, 2)));
         playerStore = Actor{
-            .kind = spawn.kind,
+            .template = &Actor.Template.Player,
             .pos = pos,
             .last_pos = pos,
-            .body = .Kinematic,
-            .speed = 45.0 / 60.0,
             .friction = 0.5,
-            .collisionBox = geom.AABBf{ -4, -4, 8, 8 },
-            .offset = geom.Vec2f{ -8, -12 },
             .image = player_blit,
         };
     }
@@ -136,11 +139,9 @@ fn loadRoom() !void {
             .Pot => {
                 needs_health += 1;
                 try actors.append(Actor{
-                    .kind = entity.kind,
+                    .template = &Actor.Template.Pot,
                     .pos = pos,
                     .last_pos = pos,
-                    .collisionBox = geom.AABBf{ -3, -3, 6, 6 },
-                    .offset = geom.Vec2f{ -8, -12 },
                     .image = draw.Blit.init_frame(0x0243, &world.bitmap, .{ .bpp = .b2 }, .{ 16, 16 }, world.pot),
                 });
             },
@@ -149,13 +150,10 @@ fn loadRoom() !void {
                 needs_intelligence += 1;
                 needs_combat += 1;
                 try actors.append(Actor{
-                    .kind = entity.kind,
+                    .template = &Actor.Template.Skeleton,
                     .pos = pos,
                     .last_pos = pos,
-                    .body = .Kinematic,
                     .friction = 0.5,
-                    .collisionBox = geom.AABBf{ -3, -3, 6, 6 },
-                    .offset = geom.Vec2f{ -8, -12 },
                     .image = draw.Blit.init_frame(0x0243, &world.bitmap, .{ .bpp = .b2 }, .{ 16, 16 }, world.skeleton),
                 });
             },
@@ -173,7 +171,7 @@ fn loadRoom() !void {
     var health_idx: usize = 0;
     var intelligence_idx: usize = 0;
     for (actors.items) |actor, a| {
-        switch (actor.kind) {
+        switch (actor.template.kind) {
             .Player => {
                 animators[anim_idx] = .{ .key = a, .val = .{
                     .anim = &world.player_anim_walk_down,
@@ -238,7 +236,7 @@ fn update_safe() !void {
         actor.bounced = false;
         actor.motive = false;
         if (actor.stunned) |stunTime| {
-            if (time - stunTime > actor.stunPeriod) {
+            if (time - stunTime > actor.template.stunPeriod) {
                 actor.stunned = null;
                 actor.friction = 0.5;
             }
@@ -285,7 +283,7 @@ fn update_safe() !void {
             const intelligence = &intAssoc.val;
             const actor = &actors.items[intAssoc.key];
             // TODO
-            if (actor.kind != .Skeleton) continue;
+            if (actor.template.kind != .Skeleton) continue;
             const player_dir = geom.vec2.normalizef(player.pos - actor.pos);
             const player_dist = geom.vec2.distf(actor.pos, player.pos);
             const view = geom.vec2.dot(player_dir, (intelligence.player_dir orelse actor.facing).getVec2f());
@@ -345,7 +343,7 @@ fn update_safe() !void {
                 camera_player_pos = player.pos;
             }
 
-            const size = geom.aabb.sizef(player.collisionBox);
+            const size = geom.aabb.sizef(player.template.collisionBox);
             const left = (player.pos[0] < bounds[0] + size[0]);
             const up = (player.pos[1] - size[1] < bounds[1]);
             const right = (player.pos[0] > bounds[2] - size[0]);
@@ -403,23 +401,23 @@ fn update_safe() !void {
     var colList = try std.ArrayList(usize).initCapacity(alloc, 5);
     defer colList.deinit();
     for (actors.items) |*actor, actorIndex| {
-        if (actor.body == .Static) continue;
+        if (actor.template.body == .Static) continue;
         const as_rectf = geom.aabb.as_rectf;
         const addvf = geom.aabb.addvf;
 
         // Don't process collision if in air
         if (actor.isInAir()) continue;
 
-        try collideBodies(&colList, as_rectf(addvf(actor.collisionBox, actor.pos)), actorIndex);
+        try collideBodies(&colList, as_rectf(addvf(actor.template.collisionBox, actor.pos)), actorIndex);
         defer colList.items.len = 0;
 
-        switch (actor.body) {
+        switch (actor.template.body) {
             .Rigid => {
                 actor.bounced = true;
                 for (colList.items) |which| {
                     const other = &actors.items[which];
                     const penetration = geom.rect.penetration(actor.getRect(), other.getRect());
-                    if (other.body == .Rigid) {
+                    if (other.template.body == .Rigid) {
                         other.pos += penetration / @splat(2, @as(f32, 2.0));
                         actor.pos -= penetration / @splat(2, @as(f32, 2.0));
                     } else {
@@ -441,9 +439,9 @@ fn update_safe() !void {
         // Collision
         const as_rectf = geom.aabb.as_rectf;
         const addvf = geom.aabb.addvf;
-        const hcols = collide(as_rectf(addvf(actor.collisionBox, geom.Vec2f{ actor.pos[0], actor.last_pos[1] })));
-        const vcols = collide(as_rectf(addvf(actor.collisionBox, geom.Vec2f{ actor.last_pos[0], actor.pos[1] })));
-        switch (actor.body) {
+        const hcols = collide(as_rectf(addvf(actor.template.collisionBox, geom.Vec2f{ actor.pos[0], actor.last_pos[1] })));
+        const vcols = collide(as_rectf(addvf(actor.template.collisionBox, geom.Vec2f{ actor.last_pos[0], actor.pos[1] })));
+        switch (actor.template.body) {
             .Rigid => {
                 if (hcols.len > 0) {
                     actor.bounced = true;
@@ -507,7 +505,7 @@ fn update_safe() !void {
             if (time - startTime > h.val.stunTime) {
                 h.val.stunned = null;
             }
-            if (actor.kind == .Pot and actor.bounced) {
+            if (actor.template.kind == .Pot and actor.bounced) {
                 h.val.stunned = null;
                 h.val.current -|= 1;
             }
@@ -695,7 +693,7 @@ fn render(alloc: std.mem.Allocator) !void {
                     w4.oval(aabb[0] + 1, aabb[1] + 1, aabb[2] - 1, aabb[3] - 1);
                 }
 
-                const pos = geom.vec2.ftoi(actor.pos + actor.offset - camera);
+                const pos = geom.vec2.ftoi(actor.pos + actor.template.offset - camera);
                 actor.image.blit(pos - geom.Vec2{ 0, @floatToInt(i32, actor.z) });
                 if (debug and actor.z <= 1) {
                     w4.DRAW_COLORS.* = 0x0040;
@@ -767,7 +765,7 @@ pub fn moveAndSlide(rect: geom.Rectf, pos: geom.Vec2f, last_pos: geom.Vec2f, max
 pub fn collideBodies(collisions: *std.ArrayList(usize), rect: geom.Rectf, which: usize) !void {
     for (actors.items) |actor, i| {
         if (which == i) continue;
-        var o_rect = geom.aabb.as_rectf(geom.aabb.addvf(actor.collisionBox, actor.pos));
+        var o_rect = geom.aabb.as_rectf(geom.aabb.addvf(actor.template.collisionBox, actor.pos));
         if (geom.rect.overlapsf(rect, o_rect)) {
             try collisions.append(i);
             if (debug and verbosity > 2) w4.tracef("collision! %d", i);

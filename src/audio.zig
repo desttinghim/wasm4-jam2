@@ -80,16 +80,16 @@ pub const music = struct {
         pub fn read(reader: anytype) !Event {
             const tag = @intToEnum(EventEnum, try reader.readInt(u8, .Little));
             switch (tag) {
-                .rest => return .{ .rest = .{
-                    .duration = reader.readInt(u8, .Little),
+                .rest => return Event{ .rest = .{
+                    .duration = try reader.readInt(u8, .Little),
                 } },
-                .param => return .{ .param = reader.readInt(u8, .Little) },
-                .adsr => return .{ .adsr = reader.readInt(u32, .Little) },
-                .vol => return .{ .vol = reader.readInt(u8, .Little) },
-                .slide => return .{ .slide = reader.readInt(u16, .Little) },
-                .note => return .{ .note = .{
-                    reader.readInt(u16, .Little),
-                    reader.readInt(u8, .Little),
+                .param => return Event{ .param = try reader.readInt(u8, .Little) },
+                .adsr => return Event{ .adsr = try reader.readInt(u32, .Little) },
+                .vol => return Event{ .vol = try reader.readInt(u8, .Little) },
+                .slide => return Event{ .slide = try reader.readInt(u16, .Little) },
+                .note => return Event{ .note = .{
+                    .freq = try reader.readInt(u16, .Little),
+                    .duration = try reader.readInt(u8, .Little),
                 } },
                 .end => return .end,
             }
@@ -151,7 +151,7 @@ pub const music = struct {
 
         pub fn write(ctx: WriteContext, writer: anytype) !void {
             // Write control events
-            try writer.writeInt(u16, @intCast(u16, ctx.songs.len), .Little);
+            try writer.writeInt(u16, @intCast(u16, ctx.events.len), .Little);
             for (ctx.events) |event| {
                 try event.write(writer);
             }
@@ -197,7 +197,7 @@ pub const music = struct {
 
             const songs_len = try reader.readInt(u16, .Little);
             const songs_start = @intCast(u32, try cursor.getPos());
-            const songs_bytes = songs_len * @sizeOf(ControlEvent);
+            const songs_bytes = songs_len * @sizeOf(u16);
 
             try cursor.seekTo(songs_start + songs_bytes);
 
