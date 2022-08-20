@@ -1,5 +1,6 @@
 const std = @import("std");
 const LDtkImport = @import("tools/LDtkImport.zig");
+const WAEL = @import("tools/WAEL.zig");
 
 const pkgs = struct {
     const zmath = std.build.Pkg{
@@ -18,8 +19,13 @@ pub fn build(b: *std.build.Builder) !void {
         .source_path = .{ .path = "assets/map.ldtk" },
         .output_name = "mapldtk",
     });
+    const music = WAEL.create(b, .{
+        .source_path = .{ .path = "assets/music.wael" },
+        .output_name = "music",
+    });
     const data_step = b.addOptions();
     data_step.addOptionFileSource("path", .{.generated = &ldtk.world_data });
+    data_step.addOptionFileSource("music", .{.generated = &music.music_data });
 
     // Build cart
     const mode = b.standardReleaseOptions();
