@@ -19,11 +19,11 @@ var long_alloc_buffer: [8192]u8 = undefined;
 var long_fba = FBA.init(&long_alloc_buffer);
 const long_alloc = long_fba.allocator();
 
-var level_alloc_buffer: [8192]u8 = undefined;
+var level_alloc_buffer: [16384]u8 = undefined;
 var level_fba = FBA.init(&level_alloc_buffer);
 const level_alloc = level_fba.allocator();
 
-var frame_alloc_buffer: [2][8192]u8 = undefined;
+var frame_alloc_buffer: [2][4096]u8 = undefined;
 var frame_fba: [2]FBA = .{
     FBA.init(&frame_alloc_buffer[0]),
     FBA.init(&frame_alloc_buffer[1]),
@@ -293,6 +293,7 @@ fn update_safe() !void {
                     }
                 } else {
                     intelligence.player_dir = null;
+                    if (player_dist < 16) intelligence.player_dir = geom.Direction.fromVec2f(player_dir);
                 }
             }
             for (intelligences) |otherAssoc| {
