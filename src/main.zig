@@ -181,19 +181,11 @@ fn loadRoom() !void {
                 anim_idx += 1;
             },
             .Pot => {
-                health[health_idx] = .{ .key = a, .val = .{
-                    .max = 2,
-                    .current = 2,
-                    .stunTime = 60,
-                } };
+                health[health_idx] = .{ .key = a, .val = .{ .max = 2, .current = 2, .stunTime = 60, .hitbox = .{ -4, -4, 8, 8 } } };
                 health_idx += 1;
             },
             .Skeleton => {
-                health[health_idx] = .{ .key = a, .val = .{
-                    .max = 5,
-                    .current = 5,
-                    .stunTime = 60,
-                } };
+                health[health_idx] = .{ .key = a, .val = .{ .max = 5, .current = 5, .stunTime = 60, .hitbox = .{ -4, -4, 8, 8 } } };
                 health_idx += 1;
                 intelligences[intelligence_idx] = .{ .key = a, .val = .{ .follow_player = true } };
                 intelligence_idx += 1;
@@ -241,6 +233,7 @@ fn update_safe() !void {
 
     // Actor update
     for (actors.items) |*actor| {
+        actor.bounced = false;
         actor.motive = false;
         if (actor.stunned) |stunTime| {
             if (time - stunTime > actor.stunPeriod) {
@@ -396,30 +389,58 @@ fn update_safe() !void {
         }
     }
 
+    var colList = try std.ArrayList(usize).initCapacity(alloc, 5);
+    defer colList.deinit();
     for (actors.items) |*actor, actorIndex| {
-        if (actor.body != .Rigid) continue;
+        if (actor.body == .Static) continue;
         const as_rectf = geom.aabb.as_rectf;
         const addvf = geom.aabb.addvf;
-        const allcols = collide(actorIndex, as_rectf(addvf(actor.collisionBox, actor.pos)));
 
-        var velocity = (actor.pos - actor.last_pos) * @splat(2, @as(f32, actor.friction));
-        for (allcols.iterWhich()) |which| {
-            if (which != .body) continue;
-            const other = &actors.items[which.body];
-            if (other.body == .Rigid) {
-                other.pos += velocity / @splat(2, @as(f32, 2));
-            }
+        try collideBodies(&colList, as_rectf(addvf(actor.collisionBox, actor.pos)), actorIndex);
+        defer colList.items.len = 0;
+
+        switch (actor.body) {
+            .Rigid => {
+                actor.bounced = true;
+                for (colList.items) |which| {
+                    const other = &actors.items[which];
+                    const penetration = geom.rect.penetration(actor.getRect(), other.getRect());
+                    if (other.body == .Rigid) {
+                        other.pos += penetration / @splat(2, @as(f32, 2.0));
+                        actor.pos -= penetration / @splat(2, @as(f32, 2.0));
+                    } else {
+                        actor.pos -= penetration;
+                    }
+                }
+            },
+            .Kinematic => {
+                for (colList.items) |which| {
+                    const other = &actors.items[which];
+                    actor.pos += geom.vec2.normalizef(actor.pos - other.pos); // geom.rect.penetration(actor.getRect(), other.getRect());
+                }
+            },
+            .Static => {},
         }
     }
 
-    for (actors.items) |*actor, actorIndex| {
+    for (actors.items) |*actor| {
         // Collision
         const as_rectf = geom.aabb.as_rectf;
         const addvf = geom.aabb.addvf;
-        const hcols = collide(actorIndex, as_rectf(addvf(actor.collisionBox, geom.Vec2f{ actor.pos[0], actor.last_pos[1] })));
-        const vcols = collide(actorIndex, as_rectf(addvf(actor.collisionBox, geom.Vec2f{ actor.last_pos[0], actor.pos[1] })));
+        const hcols = collide(as_rectf(addvf(actor.collisionBox, geom.Vec2f{ actor.pos[0], actor.last_pos[1] })));
+        const vcols = collide(as_rectf(addvf(actor.collisionBox, geom.Vec2f{ actor.last_pos[0], actor.pos[1] })));
         switch (actor.body) {
-            .Rigid, .Kinematic => {
+            .Rigid => {
+                if (hcols.len > 0) {
+                    actor.bounced = true;
+                    actor.pos[0] = actor.last_pos[0];
+                }
+                if (vcols.len > 0) {
+                    actor.bounced = true;
+                    actor.pos[1] = actor.last_pos[1];
+                }
+            },
+            .Kinematic => {
                 if (hcols.len > 0) actor.pos[0] = actor.last_pos[0];
                 if (vcols.len > 0) actor.pos[1] = actor.last_pos[1];
             },
@@ -430,27 +451,19 @@ fn update_safe() !void {
         const velocity = (actor.pos - actor.last_pos) * @splat(2, @as(f32, actor.friction));
         actor.last_pos = actor.pos;
         actor.pos += velocity;
-
-        switch (actor.kind) {
-            .Pot => {
-                try hitboxes.append(.{ .key = actorIndex, .val = actor.getRect() });
-            },
-            .Skeleton => {
-                try hitboxes.append(.{ .key = actorIndex, .val = actor.getRect() });
-            },
-            .Player => {},
-        }
     }
 
     if (player_combat.getHurtbox()) |hurtbox| {
-        try hurtboxes.append(.{ .key = playerIndex, .val = geom.aabb.as_rectf(geom.aabb.addvf(hurtbox, actors.items[playerIndex].pos)) });
+        try hurtboxes.append(.{
+            .key = playerIndex,
+            .val = geom.aabb.as_rectf(geom.aabb.addvf(hurtbox, actors.items[playerIndex].pos)),
+        });
     }
 
     for (collectables) |*collectable| {
         // Kinematics
-        const velocity = (collectable[0] - collectable[1]) * @splat(2, @as(f32, 0.8));
+        collectable[0] = moveAndSlide(geom.rect.initvf(collectable[0] - geom.Vec2f{ 2, 2 }, .{ 4, 4 }), collectable[0], collectable[1], 0.5, 0.9);
         collectable[1] = collectable[0];
-        collectable[0] += velocity;
     }
 
     // Store actors to remove
@@ -459,10 +472,20 @@ fn update_safe() !void {
 
     // Update health
     for (health) |*h| {
+        const actor = &actors.items[h.key];
         if (h.val.stunned) |startTime| {
             if (time - startTime > h.val.stunTime) {
                 h.val.stunned = null;
             }
+            if (actor.kind == .Pot and actor.bounced) {
+                h.val.stunned = null;
+                h.val.current -|= 1;
+            }
+        } else {
+            try hitboxes.append(.{
+                .key = h.key,
+                .val = geom.aabb.as_rectf(geom.aabb.addvf(h.val.hitbox, actor.pos)),
+            });
         }
     }
 
@@ -474,16 +497,16 @@ fn update_safe() !void {
                 for (health) |*h| {
                     if (h.key != hitbox.key) continue;
                     if (h.val.stunned) |_| break;
-                    h.val.current -= 1;
+                    h.val.current -|= 1;
                     h.val.stunned = time;
                     if (h.val.current == 0) {
                         try to_remove.append(h.key);
                     }
                     const taker = &actors.items[hitbox.key];
                     const hitter = &actors.items[hurtbox.key];
-                    const add = taker.pos - hitter.pos;
-                    const max = geom.vec2.normalizef(add) * @splat(2, @as(f32, 4));
-                    const vel = @minimum(max, add / @splat(2, @as(f32, 3)));
+                    const dist = @minimum(1, (8 - geom.vec2.distf(taker.pos, hitter.pos)) * 0.8);
+                    const dir = -hitter.facing.getVec2f();
+                    const vel = dir * @splat(2, dist);
                     taker.pos += vel;
                     taker.stun(time);
                     if (debug and verbosity > 1) w4.tracef("[hit] taker (%d, %d)", @floatToInt(i32, taker.pos[0]), @floatToInt(i32, taker.pos[1]));
@@ -646,18 +669,40 @@ pub fn isInMapBounds(pos: geom.Vec2) bool {
     return pos[0] >= 0 and pos[1] >= 0 and pos[0] < room.size[0] and pos[1] < room.size[1];
 }
 
-pub fn collide(which: usize, rect: geom.Rectf) CollisionInfo {
-    const tile_sizef = geom.vec2.itof(world.tile_size);
-    var collisions = CollisionInfo.init();
+pub fn moveAndSlide(rect: geom.Rectf, pos: geom.Vec2f, last_pos: geom.Vec2f, maxVelocity: f32, friction: f32) geom.Vec2f {
+    var new_pos = pos;
+    const speed = geom.vec2.distf(new_pos, last_pos);
+    const velocity = geom.vec2.normalizef(new_pos - last_pos) * @splat(2, @minimum(maxVelocity, speed * friction));
+    new_pos += velocity;
 
+    const shiftf = geom.aabb.addvf;
+    const hcols = collide(shiftf(rect, geom.Vec2f{ pos[0], last_pos[1] }));
+    const vcols = collide(shiftf(rect, geom.Vec2f{ last_pos[0], pos[1] }));
+
+    if (hcols.len > 0) {
+        new_pos[0] = last_pos[0];
+    }
+    if (vcols.len > 0) {
+        new_pos[1] = last_pos[1];
+    }
+
+    return new_pos;
+}
+
+pub fn collideBodies(collisions: *std.ArrayList(usize), rect: geom.Rectf, which: usize) !void {
     for (actors.items) |actor, i| {
         if (which == i) continue;
         var o_rect = geom.aabb.as_rectf(geom.aabb.addvf(actor.collisionBox, actor.pos));
         if (geom.rect.overlapsf(rect, o_rect)) {
-            collisions.append(actor.collisionBox, .{ .body = i });
+            try collisions.append(i);
             if (debug and verbosity > 2) w4.tracef("collision! %d", i);
         }
     }
+}
+
+pub fn collide(rect: geom.Rectf) CollisionInfo {
+    const tile_sizef = geom.vec2.itof(world.tile_size);
+    var collisions = CollisionInfo.init();
 
     const roomvec = geom.vec2.itof(room.toVec2());
     const top_left_i = geom.rect.top_leftf(rect) / tile_sizef;
@@ -677,7 +722,7 @@ pub fn collide(which: usize, rect: geom.Rectf) CollisionInfo {
             const tilepos = geom.vec2.itof(geom.Vec2{ i, a } * world.tile_size);
 
             if (isSolid(tile)) {
-                collisions.append(geom.aabb.initvf(tilepos, tile_sizef), .static);
+                collisions.append(geom.aabb.initvf(tilepos, tile_sizef));
             }
         }
     }
@@ -688,26 +733,21 @@ pub fn collide(which: usize, rect: geom.Rectf) CollisionInfo {
 pub const CollisionInfo = struct {
     len: usize,
     items: [9]geom.AABBf,
-    which: [9]BodyInfo,
-
-    const BodyInfo = union(enum) { static, body: usize };
 
     pub fn init() CollisionInfo {
         return CollisionInfo{
             .len = 0,
             .items = undefined,
-            .which = undefined,
         };
     }
 
-    pub fn iterWhich(col: CollisionInfo) []const BodyInfo {
-        return col.which[0..col.len];
+    pub fn iter(col: CollisionInfo) []const geom.AABBf {
+        return col.items[0..col.len];
     }
 
-    pub fn append(col: *CollisionInfo, item: geom.AABBf, body: BodyInfo) void {
+    pub fn append(col: *CollisionInfo, item: geom.AABBf) void {
         std.debug.assert(col.len < 9);
         col.items[col.len] = item;
-        col.which[col.len] = body;
         col.len += 1;
     }
 };

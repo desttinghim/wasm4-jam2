@@ -142,8 +142,14 @@ pub const vec2 = struct {
         return @sqrt(@reduce(.Add, squared));
     }
 
+    /// Returns true if the vector is zero
+    pub fn isApproxZero(v: Vec2f) bool {
+        return @reduce(.And, @fabs(v) < @splat(2, @as(f32, 0.01)));
+    }
+
     /// Returns the normalized vector
     pub fn normalizef(vector: Vec2f) Vec2f {
+        if (isApproxZero(vector)) return .{ 0, 0 };
         return vector / @splat(2, lengthf(vector));
     }
 

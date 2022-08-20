@@ -18,8 +18,9 @@ facing: geom.Direction = .West,
 
 // True if actor is attempting to move
 motive: bool = false,
+bounced: bool = false,
 stunned: ?usize = null,
-stunPeriod: usize = 30,
+stunPeriod: usize = 5,
 
 pub fn render(this: *Actor) void {
     const pos = geom.vec2.ftoi(this.pos + this.offset);

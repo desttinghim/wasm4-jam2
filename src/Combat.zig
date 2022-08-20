@@ -39,15 +39,15 @@ pub fn getHurtbox(this: Combat) ?geom.AABBf {
     var offset = this.actor.facing.getVec2f() * @splat(2, @as(f32, 8));
     const chain_offset_x: f32 = x: {
         if (offset[1] > 0.01 or offset[1] < 0.01) {
-            break :x if (this.last_attack == 0) @as(f32, -4) else -8;
+            break :x if (this.last_attack == 0) @as(f32, -8) else -12;
         } else {
             break :x 0;
         }
     };
     offset[0] += chain_offset_x;
     const hurtbox: geom.AABBf = switch (this.actor.facing) {
-        .Northwest, .Northeast, .North, .Southwest, .Southeast, .South => .{ 0, -8, 14, 12 },
-        .West, .East => .{ 0, -10, 12, 14 },
+        .Northwest, .Northeast, .North, .Southwest, .Southeast, .South => .{ 0, -8, 16, 12 },
+        .West, .East => .{ 0, -10, 12, 16 },
     };
     return geom.aabb.addvf(hurtbox, offset);
 }
