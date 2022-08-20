@@ -396,6 +396,9 @@ fn update_safe() !void {
         const as_rectf = geom.aabb.as_rectf;
         const addvf = geom.aabb.addvf;
 
+        // Don't process collision if in air
+        if (actor.isInAir()) continue;
+
         try collideBodies(&colList, as_rectf(addvf(actor.collisionBox, actor.pos)), actorIndex);
         defer colList.items.len = 0;
 
@@ -448,9 +451,19 @@ fn update_safe() !void {
         }
 
         // Kinematics
-        const velocity = (actor.pos - actor.last_pos) * @splat(2, @as(f32, actor.friction));
+        const FRICTION = if (actor.isInAir()) 0.9 else actor.friction;
+        const velocity = (actor.pos - actor.last_pos) * @splat(2, @as(f32, FRICTION));
         actor.last_pos = actor.pos;
         actor.pos += velocity;
+
+        const GRAVITY = 0.2;
+        const z_vel = actor.z - actor.last_z - GRAVITY;
+        actor.last_z = actor.z;
+        actor.z += z_vel;
+        if (actor.z < 0) {
+            actor.last_z = (actor.z - actor.last_z) * 0.8;
+            actor.z = 0;
+        }
     }
 
     if (player_combat.getHurtbox()) |hurtbox| {
@@ -504,10 +517,11 @@ fn update_safe() !void {
                     }
                     const taker = &actors.items[hitbox.key];
                     const hitter = &actors.items[hurtbox.key];
-                    const dist = @minimum(1, (8 - geom.vec2.distf(taker.pos, hitter.pos)) * 0.8);
+                    const dist: f32 = -8.0;
                     const dir = -hitter.facing.getVec2f();
                     const vel = dir * @splat(2, dist);
                     taker.pos += vel;
+                    taker.z += 2;
                     taker.stun(time);
                     if (debug and verbosity > 1) w4.tracef("[hit] taker (%d, %d)", @floatToInt(i32, taker.pos[0]), @floatToInt(i32, taker.pos[1]));
                     if (debug and verbosity > 1) w4.tracef("[hit] hitter (%d, %d)", @floatToInt(i32, hitter.pos[0]), @floatToInt(i32, hitter.pos[1]));
@@ -640,10 +654,13 @@ fn render(alloc: std.mem.Allocator) !void {
     for (draw_order.items) |renderable| {
         switch (renderable.kind) {
             .Actor => |actor| {
-                const pos = geom.vec2.ftoi(actor.pos + actor.offset - camera);
-                actor.image.blit(pos);
+                w4.DRAW_COLORS.* = 0x0044;
                 const aabb = geom.aabb.ftoi(geom.aabb.subvf(actor.getAABB(), camera));
-                if (debug) {
+                w4.oval(aabb[0], aabb[1],  aabb[2],  aabb[3]);
+
+                const pos = geom.vec2.ftoi(actor.pos + actor.offset - camera);
+                actor.image.blit(pos - geom.Vec2{ 0, @floatToInt(i32, actor.z) });
+                if (debug and actor.z <= 1) {
                     w4.DRAW_COLORS.* = 0x0040;
                     w4.rect(aabb[0], aabb[1], @intCast(usize, aabb[2]), @intCast(usize, aabb[3]));
                 }

@@ -9,6 +9,8 @@ kind: world.EntityKind,
 image: draw.Blit,
 offset: geom.Vec2f,
 
+z: f32 = 0,
+last_z: f32 = 0,
 pos: geom.Vec2f,
 last_pos: geom.Vec2f,
 collisionBox: geom.AABBf,
@@ -30,6 +32,7 @@ pub fn render(this: *Actor) void {
 pub fn move(actor: *Actor, input_vector: geom.Vec2f) void {
     // Don't move when stunned
     if (actor.stunned != null) return;
+    if (actor.isInAir()) return;
     const speed: f32 = 30.0 / 60.0;
     if (geom.Direction.fromVec2f(input_vector)) |facing| {
         actor.facing = facing;
@@ -42,6 +45,10 @@ pub fn stun(actor: *Actor, time: usize) void {
     actor.stunned = time;
     actor.motive = false;
     actor.friction = 0.85;
+}
+
+pub fn isInAir(this: Actor) bool {
+    return this.z > 0.4 or this.z - this.last_z > 0.2;
 }
 
 pub fn isMoving(this: Actor) bool {
