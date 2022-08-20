@@ -186,7 +186,7 @@ fn loadRoom() !void {
                 health_idx += 1;
             },
             .Skeleton => {
-                health[health_idx] = .{ .key = a, .val = .{ .max = 5, .current = 5, .stunTime = 60, .hitbox = .{ -4, -4, 8, 8 } } };
+                health[health_idx] = .{ .key = a, .val = .{ .max = 2, .current = 2, .stunTime = 60, .hitbox = .{ -4, -4, 8, 8 } } };
                 health_idx += 1;
                 intelligences[intelligence_idx] = .{ .key = a, .val = .{ .follow_player = true } };
                 intelligence_idx += 1;
@@ -465,6 +465,11 @@ fn update_safe() !void {
         if (actor.z < 0) {
             actor.last_z = (actor.z - actor.last_z) * 0.8;
             actor.z = 0;
+            if (@fabs(actor.last_z) > 0.7) {
+                actor.bounced = true;
+                // TODO: manage sound effects in one place
+                w4.tone(60 | 90 << 16, 4 | 8 << 8 | 8 << 16, 10, 0x03);
+            }
         }
     }
 
@@ -496,11 +501,17 @@ fn update_safe() !void {
                 h.val.stunned = null;
                 h.val.current -|= 1;
             }
+            if (actor.bounced and h.val.current == 0) h.val.bounced = true;
         } else {
-            try hitboxes.append(.{
-                .key = h.key,
-                .val = geom.aabb.as_rectf(geom.aabb.addvf(h.val.hitbox, actor.pos)),
-            });
+            if (h.val.bounced and h.val.current == 0) {
+                try to_remove.append(h.key);
+            } else {
+                try hitboxes.append(.{
+                    .key = h.key,
+                    .val = geom.aabb.as_rectf(geom.aabb.addvf(h.val.hitbox, actor.pos)),
+                });
+            }
+            if (!actor.bounced) h.val.bounced = false;
         }
     }
 
@@ -514,9 +525,6 @@ fn update_safe() !void {
                     if (h.val.stunned) |_| break;
                     h.val.current -|= 1;
                     h.val.stunned = time;
-                    if (h.val.current == 0) {
-                        try to_remove.append(h.key);
-                    }
                     const taker = &actors.items[hitbox.key];
                     const hitter = &actors.items[hurtbox.key];
                     const dist: f32 = -8.0;
@@ -525,6 +533,8 @@ fn update_safe() !void {
                     taker.pos += vel;
                     taker.z += 2;
                     taker.stun(time);
+                    // TODO: manage sound effects in one place
+                    w4.tone(150 | 50 << 16, 8 << 16, 30, 0x03);
                     if (debug and verbosity > 1) w4.tracef("[hit] taker (%d, %d)", @floatToInt(i32, taker.pos[0]), @floatToInt(i32, taker.pos[1]));
                     if (debug and verbosity > 1) w4.tracef("[hit] hitter (%d, %d)", @floatToInt(i32, hitter.pos[0]), @floatToInt(i32, hitter.pos[1]));
                     if (debug and verbosity > 1) w4.tracef("[hit] velocity (%d, %d)", @floatToInt(i32, vel[0]), @floatToInt(i32, vel[1]));
@@ -553,6 +563,8 @@ fn update_safe() !void {
         const actor = actors.swapRemove(remove);
         health = Assoc(Health).swapRemove(health, remove, actors.items.len);
         intelligences = Assoc(Intelligence).swapRemove(intelligences, remove, actors.items.len);
+        // TODO: manage sound effects in one place
+        // w4.tone(180 | 150 << 16, 0 | 6 << 8 | 0 << 16 | 2 << 24, 38, 0x01);
 
         // Add their position to collectables
         new_collectables[collectCount] = .{ actor.pos, actor.last_pos };
@@ -565,6 +577,8 @@ fn update_safe() !void {
         const dist = geom.vec2.distf(collectable[0], player);
         if (dist < 4) {
             try to_remove.append(collectCount);
+            // TODO: manage sound effects in one place
+            w4.tone(0 | 210 << 16, 6 | 0 << 8 | 0 << 16 | 12 << 24, 15, 0x01);
             continue;
         } else if (dist < 16) {
             const towards = geom.vec2.normalizef(player - collectable[0]);
