@@ -178,6 +178,14 @@ pub const vec2 = struct {
     pub fn lerp(v0: Vec2f, v1: Vec2f, t: f32) Vec2f {
         return v0 + @splat(2, t) * (v1 - v0);
     }
+
+    pub fn perpendicularCWf(v: Vec2f) Vec2f {
+        return Vec2f{ v[1], -v[0] };
+    }
+
+    pub fn perpendicularWSf(v: Vec2f) Vec2f {
+        return Vec2f{ -v[1], v[0] };
+    }
 };
 
 /// Represents a 3D floating point Vector as .{ x, y, z }

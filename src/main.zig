@@ -284,19 +284,37 @@ fn update_safe() !void {
             // TODO
             if (actor.kind != .Skeleton) continue;
             const player_dir = geom.vec2.normalizef(player.pos - actor.pos);
-            const view = geom.vec2.dot(player_dir, actor.facing.getVec2f());
-            if (view > 0.5) {
-                intelligence.player_in_view = true;
-            } else {
-                intelligence.player_in_view = false;
-            }
-            if (intelligence.player_in_view and intelligence.follow_player) {
-                if (geom.vec2.distf(actor.pos, player.pos) > intelligence.approach_distance) {
-                    actor.move(player_dir);
+            const player_dist = geom.vec2.distf(actor.pos, player.pos);
+            const view = geom.vec2.dot(player_dir, (intelligence.player_dir orelse actor.facing).getVec2f());
+            var int_input_vector = geom.Vec2f{ 0, 0 };
+            if (intelligence.follow_player) {
+                if (view > 0) {
+                    if (view > 0.5) {
+                        intelligence.player_dir = geom.Direction.fromVec2f(player_dir);
+                        if (player_dist > intelligence.approach_distance) {
+                            int_input_vector = player_dir;
+                        } else if (player_dist < intelligence.backup_distance) {
+                            int_input_vector = -player_dir;
+                        } else {}
+                    }
                 } else {
-                    actor.facing = geom.Direction.fromVec2f(player_dir) orelse actor.facing;
+                    intelligence.player_dir = null;
                 }
             }
+            for (intelligences) |otherAssoc| {
+                if (otherAssoc.key == intAssoc.key) continue;
+                const other = actors.items[otherAssoc.key];
+                if (geom.vec2.distf(actor.pos, other.pos) < 16) {
+                    int_input_vector = geom.vec2.normalizef(actor.pos - other.pos);
+                    if (intelligence.player_dir) |_| {
+                        const cw = geom.vec2.perpendicularCWf(player_dir);
+                        const ws = geom.vec2.perpendicularWSf(player_dir);
+                        int_input_vector = if (geom.vec2.dot(cw, int_input_vector) > 0.5) cw else ws;
+                    }
+                    break;
+                }
+            }
+            actor.move(int_input_vector);
         }
 
         {
