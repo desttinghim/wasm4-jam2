@@ -42,6 +42,7 @@ const Health = struct {
     stunned: ?usize = null,
     stunTime: usize = 20,
 };
+const Intelligence = @import("Intelligence.zig");
 
 const player_blit = draw.Blit.init_frame(world.player_style, &world.player_bmp, .{ .bpp = .b2 }, .{ 16, 16 }, 0);
 const player_offset = geom.Vec2f{ -8, -12 };
@@ -65,6 +66,7 @@ var actors: std.ArrayList(Actor) = undefined;
 var collectables: [][2]geom.Vec2f = &.{};
 var animators: []Assoc(Anim) = undefined;
 var health: []Assoc(Health) = undefined;
+var intelligences: []Assoc(Intelligence) = undefined;
 
 var db: Database = undefined;
 
@@ -144,6 +146,7 @@ fn loadRoom() !void {
     // TODO: give player a health stat
     var needs_health: usize = 0;
     var needs_combat: usize = 0;
+    var needs_intelligence: usize = 0;
 
     // Load other entities
     for (entities) |entity| {
@@ -164,12 +167,14 @@ fn loadRoom() !void {
             },
             .Skeleton => {
                 needs_health += 1;
+                needs_intelligence += 1;
                 needs_combat += 1;
                 try actors.append(Actor{
                     .kind = entity.kind,
                     .pos = pos,
                     .last_pos = pos,
                     .body = .Kinematic,
+                    .friction = 0.5,
                     .collisionBox = geom.AABBf{ -3, -3, 6, 6 },
                     .offset = geom.Vec2f{ -8, -12 },
                     .image = draw.Blit.init_frame(0x0243, &world.bitmap, .{ .bpp = .b2 }, .{ 16, 16 }, world.skeleton),
@@ -181,11 +186,13 @@ fn loadRoom() !void {
     // Allocate animators
     animators = try level_alloc.alloc(Assoc(Anim), needs_animator);
     health = try level_alloc.alloc(Assoc(Health), needs_health);
+    intelligences = try level_alloc.alloc(Assoc(Intelligence), needs_intelligence);
 
     if (debug and verbosity > 0) w4.tracef("[start] Anim count %d", needs_animator);
     // Add components
     var anim_idx: usize = 0;
     var health_idx: usize = 0;
+    var intelligence_idx: usize = 0;
     for (actors.items) |actor, a| {
         switch (actor.kind) {
             .Player => {
@@ -211,6 +218,8 @@ fn loadRoom() !void {
                     .stunTime = 60,
                 } };
                 health_idx += 1;
+                intelligences[intelligence_idx] = .{ .key = a, .val = .{.follow_player = true} };
+                intelligence_idx += 1;
             },
         }
     }
@@ -258,7 +267,6 @@ fn update_safe() !void {
         // Input
         var player = &actors.items[playerIndex];
         player.motive = false;
-        const speed: f32 = 30.0 / 60.0;
         var input_vector = geom.Vec2f{ 0, 0 };
 
         if (input.btn(.one, .up)) input_vector += geom.Vec2f{ 0, -1 };
@@ -269,21 +277,36 @@ fn update_safe() !void {
         input_vector = geom.vec2.normalizef(input_vector);
 
         if (!player_combat.is_attacking) {
-            if (geom.Direction.fromVec2f(input_vector)) |facing| {
-                player.facing = facing;
-                player.pos += @splat(2, speed) * input_vector;
-                player.motive = true;
-            }
+            player.move(input_vector);
             if (player.motive and player_combat.is_attacking) player_combat.endAttack();
             if (input.btnp(.one, .z)) player_combat.startAttack(time);
         } else if (!player_combat.animator.interruptable) {
-            player.pos += player.facing.getVec2f() * @splat(2, speed);
+            // player.pos += player.facing.getVec2f() * @splat(2, speed);
         } else {
             if (geom.Direction.fromVec2f(input_vector)) |facing| {
                 player.facing = facing;
             }
-            if (input.btnp(.one, .z)) player_combat.startAttack(time);
-            if (time - player_combat.last_attacking > 45) player_combat.endAttack();
+            const delta = time - player_combat.last_attacking;
+            if (delta > 25 and input.btnp(.one, .z)) player_combat.startAttack(time);
+            if (delta > 40) player_combat.endAttack();
+        }
+
+        for (intelligences) |*intAssoc| {
+            const intelligence = &intAssoc.val;
+            const actor = &actors.items[intAssoc.key];
+            if (actor.kind != .Skeleton) continue;
+            const player_dir = geom.vec2.normalizef(player.pos - actor.pos);
+            const view = geom.vec2.dot(player_dir, actor.facing.getVec2f());
+            if (view > 0.5) {
+                intelligence.player_in_view = true;
+            }
+            if (intelligence.player_in_view and intelligence.follow_player) {
+                if ( geom.vec2.distf(actor.pos, player.pos) > intelligence.approach_distance) {
+                    actor.move(player_dir);
+                } else {
+                    actor.facing = geom.Direction.fromVec2f(player_dir) orelse actor.facing;
+                }
+            }
         }
 
         {
@@ -510,6 +533,22 @@ fn update_safe() !void {
         for (health) |h, i| {
             if (h.key == actors.items.len) {
                 health[i].key = remove;
+            }
+        }
+        for (intelligences) |h, i| {
+            if (h.key == remove) {
+                if (i != intelligences.len - 1) {
+                    std.mem.swap(Assoc(Intelligence), &intelligences[i], &intelligences[intelligences.len - 1]);
+                }
+                intelligences = intelligences[0 .. intelligences.len - 1];
+                if (debug and verbosity > 0) w4.tracef("[remove] remove intelligences %d, remove=%d, key=%d", i, remove, h.key);
+                if (debug and verbosity > 0) w4.tracef("[remove] intelligences_len=%d", intelligences.len);
+                break;
+            }
+        }
+        for (intelligences) |h, i| {
+            if (h.key == actors.items.len) {
+                intelligences[i].key = remove;
             }
         }
         // Add their position to collectables

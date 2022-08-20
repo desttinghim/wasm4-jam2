@@ -24,6 +24,15 @@ pub fn render(this: *Actor) void {
     this.image.blit(pos);
 }
 
+pub fn move(actor: *Actor, input_vector: geom.Vec2f) void {
+    const speed: f32 = 30.0 / 60.0;
+    if (geom.Direction.fromVec2f(input_vector)) |facing| {
+        actor.facing = facing;
+        actor.pos += @splat(2, speed) * input_vector;
+        actor.motive = true;
+    }
+}
+
 pub fn isMoving(this: Actor) bool {
     return (@reduce(.Or, this.pos != this.last_pos));
 }
