@@ -388,7 +388,7 @@ pub fn update(time: usize) !void {
                 player.last_pos = player.pos;
             }
             if (next_room != null and right) {
-                player.pos[0] = bounds[2] + size[0] * 1.5;
+                player.pos[0] = bounds[2] + size[0];
                 player.last_pos = player.pos;
             }
             if (next_room != null and down) {
@@ -668,6 +668,7 @@ pub fn update(time: usize) !void {
 
     if (next_room) |next| {
         playerStore = actors.items[playerIndex];
+        playerStore.pos = @divFloor(playerStore.pos, world.tile_sizef) * world.tile_sizef + (world.tile_sizef / @splat(2, @as(f32, 2)));
         room = next;
         try loadRoom();
     }
@@ -702,12 +703,15 @@ fn render(alloc: std.mem.Allocator, time: usize) !void {
     // Render background tiles
     w4.DRAW_COLORS.* = 0x1234;
     const camera_pos = geom.vec2.ftoi(camera);
-    var x: isize = 0;
-    while (x < room.size[0]) : (x += 1) {
-        var y: isize = 0;
-        while (y < room.size[1]) : (y += 1) {
-            const idx = @intCast(usize, y * @intCast(i16, room.size[0]) + x);
-            world.blit((geom.Vec2{ x, y } + room.toVec2()) * world.tile_size - camera_pos, room.tiles[idx]);
+    // Render background tiles
+    {
+        var x: isize = 0;
+        while (x < room.size[0]) : (x += 1) {
+            var y: isize = 0;
+            while (y < room.size[1]) : (y += 1) {
+                const idx = @intCast(usize, y * @intCast(i16, room.size[0]) + x);
+                world.blit((geom.Vec2{ x, y } + room.toVec2()) * world.tile_size - camera_pos, room.tiles[idx]);
+            }
         }
     }
 
@@ -764,6 +768,21 @@ fn render(alloc: std.mem.Allocator, time: usize) !void {
             },
         }
     }
+
+    // Render foreground tiles
+    {
+        var x: isize = 0;
+        while (x < room.size[0]) : (x += 1) {
+            var y: isize = 0;
+            while (y < room.size[1]) : (y += 1) {
+                const idx = @intCast(usize, y * @intCast(i16, room.size[0]) + x);
+                const tile = room.tiles[idx];
+                if (!isForeground(tile)) continue;
+                w4.DRAW_COLORS.* = 0x0234;
+                world.blit((geom.Vec2{ x, y } + room.toVec2()) * world.tile_size - camera_pos, tile);
+            }
+        }
+    }
 }
 
 fn renderUi() void {
@@ -782,6 +801,18 @@ fn renderUi() void {
     w4.textUtf8(heart_count_str, heart_count_str.len, heart_pos[0] + 17, heart_pos[1] + 5);
     w4.DRAW_COLORS.* = 0x0004;
     w4.textUtf8(heart_count_str, heart_count_str.len, heart_pos[0] + 16, heart_pos[1] + 4);
+}
+
+pub fn isForeground(tile: u8) bool {
+    return switch(tile) {
+        96,
+        97,
+        98,
+        79,
+        112...114,
+        => true,
+        else => false,
+    };
 }
 
 pub fn isSolid(tile: u8) bool {
