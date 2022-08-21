@@ -472,10 +472,20 @@ pub fn update(time: usize) !void {
                     actor.bounced = true;
                     actor.pos[1] = actor.last_pos[1];
                 }
+                const cols = collide(as_rectf(addvf(actor.template.collisionBox, actor.pos)));
+                if (cols.len > 0) {
+                    actor.bounced = true;
+                    actor.pos = actor.last_pos;
+                }
             },
             .Kinematic => {
                 if (hcols.len > 0) actor.pos[0] = actor.last_pos[0];
                 if (vcols.len > 0) actor.pos[1] = actor.last_pos[1];
+                const cols = collide(as_rectf(addvf(actor.template.collisionBox, actor.pos)));
+                if (cols.len > 0) {
+                    actor.bounced = true;
+                    actor.pos = actor.last_pos;
+                }
             },
             .Static => {},
         }
