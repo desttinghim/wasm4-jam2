@@ -134,7 +134,7 @@ fn parseLevel(opt: struct {
         .tiles = tiles,
     };
 
-    var cliff_layer: ?LDtk.LayerInstance = null;
+    var solids_layer: ?LDtk.LayerInstance = null;
     var environment_layer: ?LDtk.LayerInstance = null;
 
     for (layers) |layer| {
@@ -159,11 +159,11 @@ fn parseLevel(opt: struct {
             }
 
             std.log.warn("Entities: {}", .{entities.items.len});
-        } else if (std.mem.eql(u8, layer.__identifier, "Cliffs")) {
-            // cliff
+        } else if (std.mem.eql(u8, layer.__identifier, "Solids")) {
+            // solids
             std.debug.assert(layer.__type == .IntGrid);
 
-            cliff_layer = layer;
+            solids_layer = layer;
         } else if (std.mem.eql(u8, layer.__identifier, "Environment")) {
             // environment
             std.debug.assert(layer.__type == .IntGrid);
@@ -175,16 +175,16 @@ fn parseLevel(opt: struct {
         }
     }
 
-    if (cliff_layer == null) return error.MissingCliffLayer;
+    if (solids_layer == null) return error.MissingSolidsLayer;
     if (environment_layer == null) return error.MissingEnvironmentLayer;
 
-    const cliff = cliff_layer.?;
+    const solids = solids_layer.?;
     const environment = environment_layer.?;
 
-    std.debug.assert(cliff.__cWid == environment.__cWid);
-    std.debug.assert(cliff.__cHei == environment.__cHei);
+    std.debug.assert(solids.__cWid == environment.__cWid);
+    std.debug.assert(solids.__cHei == environment.__cHei);
 
-    const width = @intCast(u16, cliff.__cWid);
+    const width = @intCast(u16, solids.__cWid);
     std.debug.assert(width == room.size[0]);
 
     for (tiles) |_, i| {
@@ -200,10 +200,10 @@ fn parseLevel(opt: struct {
         tiles[i] = t;
     }
 
-    // Add cliff tiles
-    for (cliff.autoLayerTiles) |autotile| {
-        const x = @divExact(autotile.px[0], cliff.__gridSize);
-        const y = @divExact(autotile.px[1], cliff.__gridSize);
+    // Add solids tiles
+    for (solids.autoLayerTiles) |autotile| {
+        const x = @divExact(autotile.px[0], solids.__gridSize);
+        const y = @divExact(autotile.px[1], solids.__gridSize);
         const i = @intCast(usize, x + y * width);
         const t = @intCast(u8, autotile.t);
         tiles[i] = t;

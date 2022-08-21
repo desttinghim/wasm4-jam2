@@ -97,6 +97,7 @@ fn loadRoom() !void {
     var needs_health: usize = 0;
     var needs_combat: usize = 0;
     var needs_intelligence: usize = 0;
+    var player_spawn = false;
 
     // Load other entities
     for (entities) |entity| {
@@ -104,6 +105,7 @@ fn loadRoom() !void {
         const pos = entity.toPos() + (tile_sizef / @splat(2, @as(f32, 2)));
         switch (entity.kind) {
             .Player => {
+                player_spawn = true;
                 needs_health += 1;
                 needs_animator += 1;
                 needs_combat += 1;
@@ -119,6 +121,12 @@ fn loadRoom() !void {
                 try actors.append(Actor.init(&Actor.Template.Skeleton, pos));
             },
         }
+    }
+
+    if (!player_spawn) {
+        needs_health += 1;
+        needs_animator += 1;
+        needs_combat += 1;
     }
 
     // Allocate animators
@@ -142,8 +150,8 @@ fn loadRoom() !void {
                 } };
                 anim_idx += 1;
                 health[health_idx] = .{ .key = a, .val = .{
-                    .max = 2,
-                    .current = 2,
+                    .max = 10,
+                    .current = 10,
                     .stunTime = 60,
                     .hitbox = .{ -4, -4, 8, 8 },
                 } };
@@ -777,7 +785,15 @@ fn renderUi() void {
 }
 
 pub fn isSolid(tile: u8) bool {
-    return (tile >= 1 and tile <= 6) or (tile >= 18 and tile <= 23 and tile != 19) or (tile >= 35 and tile <= 40) or (tile >= 55 and tile <= 57) or (tile >= 72 and tile <= 74);
+    return (tile >= 1 and tile <= 6) or
+        (tile >= 18 and tile <= 23 and tile != 19) or
+        (tile >= 35 and tile <= 40) or
+        (tile >= 55 and tile <= 57) or
+        (tile >= 72 and tile <= 74) or
+        (tile >= 92 and tile <= 101 and tile != 96 and tile != 98) or
+        (tile >= 107 and tile <= 118) or
+        (tile >= 131 and tile <= 134)
+    ;
 }
 
 pub fn isInScreenBounds(pos: geom.Vec2) bool {
