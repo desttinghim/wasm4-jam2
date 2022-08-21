@@ -1,87 +1,70 @@
+# Global values
+# Use spd or tempo, but not both
+# spd = speed of 1/64th? note
+# tempo = beats per minute
+# time = beats/measure
+
+
+###############
+# Instruments #
+###############
+# Mode (pulse channels): 0 = 1/8, 1 = 1/4, 2 = 1/2, 3 = 3/4
+# a, d, s, r, use hexadecimal
+# freq, glide
+
+: Instrument arps   !mode 2 ;
+: Instrument kick   !mode 3 !r 2 ;
+: Instrument lead   !mode 1 !d 1 !r FF ;
+: Instrument offlead !mode 2 !d 60 !r FF ;
+: Instrument silly  !mode 1 ;
+
+# : Instrument lead2  !mode 1 !d 1 !r 180 ;
+# : Instrument bass   ;
+# : Instrument noise  ;
+
+# Sfx
+
+: Sfx kick      !d 1 !r 10 !freq 30 !glide 0 ;
+: Sfx snare     !r 15 !freq 20 !glide 6 ;
+: Sfx cymbal    !s 2 !freq 4E ;
+
+##########
+# Song 1 #
+##########
+
 !tempo 112
 !time 4/4
 
-# gameOver
+# melody A, on channel pulse 1
+# : Part melodyA @pulse1
+# [ %lead
+#   (mf) o4  c8 d g  c d g  c d  | > a b < d  > a b < d  > a b |
+# ] ;
 
-: Instrument short !mode 3 !r 2 ;
-: Instrument med   !mode 2 !r 4 ;
-: Instrument bass  !r F ;
+# : Part bassA @triangle
+# [ %bass
+#     (mf) o3  c2 g | > a < d |
+#              c2 g | > a < d |
+# ] ;
 
-: Sfx kick !r 7 !freq 30 !glide 0 ;
+# : Part melodyB @pulse1
+# [ %med
+#     (mf) o4  c8 d g  c d g  c d  | > a b < d  > a b < d  > a b |
+# ] ;
 
-: Part melodyA @p1 [ %short
-(mf) o4  c8 d g  c d g  c d  | > a b < d  > a b < d  > a b |
-] ;
-
-: Part bassA @tri [ %bass
-    (mf) o3  c2 g | > a < d |
-             c2 g | > a < d |
-] ;
-
-: Part melodyB @p1 [ %med
-    (mf) o4  c8 d g  c d g  c d  | > a b < d  > a b < d  > a b |
-] ;
-
-: Part drumloop @noise [[
-    %kick (f) o4 a16 r r a r a r r a r r r r a r r |
-]] ;
+: Part drumloop @noise
+[[ (f) o4 %kick a16  %cymbal a %snare a %cymbal a %kick a %cymbal a %snare a %cymbal a %kick a %cymbal a %snare a %cymbal a %kick a %cymbal a %snare a %cymbal a |
+]]
+;
 
 : Song gameOver
-  play @p1 melodyA
-  play @tri bassA
+  # play @p1 melodyA
+  # play @tri bassA
   play @noise drumloop
 
-  at 4
-  play @p1 melodyB
+  # at 4
+  # play @p1 melodyB
 
   at 6
   dalSegno
 ;
-
-
-# getFruit
-
-!tempo 224
-!time 2/4
-
-: Instrument basic !mode 3 !r 2 ;
-
-: Part getFruit @p1 [ %basic
-    (mf) o3
-    c16 d c8 > b < c  |
-] ;
-
-: Part getFruit2 @p1 [ %basic
-  (mf) o3
-  c16 d e8 f g
-] ;
-
-: Part getFruit3 @p1 [ %basic
-  (mf) o3
-  g16 f e8 d c
-] ;
-
-: Song getFruit   play @p1 getFruit   at 1 ;
-: Song getFruit2  play @p1 getFruit2  at 1 ;
-: Song getFruit3  play @p1 getFruit3  at 1 ;
-
-
-# I'm going to try to base this off the sound of the GM SoundFont Square lead
-# I have no idea what parameters are being used there, so I'm just putting stuff
-# down here until I research it.
-: Instrument squareLead !mode 2 !a 4 !d 2 !r 2 ;
-
-!tempo 224
-!time 4/4
-: Part spooky1 @p1 [
-  %squareLead (mp) o4
-  b8 < d f+ f+ > a+ < d f+ f+  | > a < c+ e e d+2     |
-  > g8 b < d d > f+ a+ < c+ c+ | > f+ < c+ > a+ a+ b2 |
-] ;
-
-: Part spooky2 @p1 [
-  %squareLead (mp) o4
-  b8 b < d+ f+ a2 | g4 f+ g e |
-] ;
-
-: Song spooky play @p1 spooky1 at 4  play @p1 spooky2 at 6 dalSegno ;

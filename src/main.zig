@@ -95,7 +95,7 @@ fn start_safe() !void {
     db = try Database.init(long_alloc);
     const music = try audio.music.Context.init(music_data);
     wae = audio.music.WAE.init(music);
-    wae.playSong(2);
+    wae.playSong(0);
 
     var spawn: world.Entity = db.getSpawn() orelse return error.PlayerNotFound;
     room = db.getRoomContaining(spawn.toVec()) orelse return error.RoomNotFound;

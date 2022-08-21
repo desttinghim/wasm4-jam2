@@ -48,7 +48,7 @@ fn make(step: *std.build.Step) !void {
     const source = try source_file.readToEndAlloc(allocator, 10 * MB);
     defer allocator.free(source);
 
-    // TODO Parse WAEL file
+    // Parse WAEL file
     const music_data = try parse(allocator, source);
     defer {
         allocator.free(music_data.songs);
@@ -65,7 +65,7 @@ fn make(step: *std.build.Step) !void {
     defer data.deinit();
     const writer = data.writer();
 
-    // TODO write bytes into array
+    // Write bytes into array
     try music_data.write(writer);
 
     // Open output file and write data into it
@@ -471,7 +471,7 @@ pub fn parse(alloc: std.mem.Allocator, buf: []const u8) !WriteContext {
                             currentOctave = (tok[1] - '0');
                         } else return error.MissingOctaveNumber,
                         else => {
-                            // std.log.warn("{s}", .{tok});
+                            std.log.warn("{s}", .{tok});
                             var note_res = try parseNote(tok);
                             if (tok.len > 1 and note_res.end != tok.len) {
                                 var duration_res = try parseDuration(tok[note_res.end + 1 .. tok.len]);

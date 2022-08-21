@@ -375,9 +375,9 @@ pub const music = struct {
 
     /// What channel each cursor corresponds to
     pub const CursorChannel = enum(u8) {
-        p1 = w4.TONE_PULSE1,
-        p2 = w4.TONE_PULSE2,
-        tri = w4.TONE_TRIANGLE,
+        pulse1 = w4.TONE_PULSE1,
+        pulse2 = w4.TONE_PULSE2,
+        triangle = w4.TONE_TRIANGLE,
         noise = w4.TONE_NOISE,
         any,
         none,
