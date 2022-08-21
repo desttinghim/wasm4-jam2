@@ -1,7 +1,8 @@
 const w4 = @import("wasm4.zig");
 const std = @import("std");
-const debug = false;
-const verbosity = 0;
+const settings = @import("settings.zig");
+const debug = settings.debug;
+const verbosity = settings.verbosity;
 
 // const start_attack = w4.tone(120 + player_combat.chain | 0 << 16, 0 | 16 << 8 | 0 << 16 | 2 << 24, 38, 0x03);
 pub const punch = Sfx{
@@ -30,6 +31,15 @@ pub const hit = Sfx{
     .fend = 50,
 };
 // const death = w4.tone(180 | 150 << 16, 0 | 6 << 8 | 0 << 16 | 2 << 24, 38, 0x01);
+// w4.tone(0 | 210 << 16, 6 | 0 << 8 | 0 << 16 | 12 << 24, 15, 0x01);
+pub const collect = Sfx{
+    .channel = w4.TONE_PULSE1,
+    .volume = 15,
+    .sustain = 6,
+    .attack = 12,
+    .fstart = 0,
+    .fend = 210,
+};
 
 pub const Sfx = struct {
     channel: u32 = 0,
@@ -44,6 +54,7 @@ pub const Sfx = struct {
     peak: u16 = 0,
 
     pub fn play(sfx: Sfx) void {
+        if (settings.muted) return;
         w4.tone(
             sfx.fstart | sfx.fend << 16,
             sfx.sustain | sfx.release << 8 | sfx.decay << 16 | sfx.attack << 24,

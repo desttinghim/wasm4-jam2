@@ -562,9 +562,8 @@ pub fn update(time: usize) !void {
         const dist = geom.vec2.distf(collectable[0], player);
         if (dist < 4) {
             try to_remove.append(collectCount);
-            // TODO: manage sound effects in one place
-            w4.tone(0 | 210 << 16, 6 | 0 << 8 | 0 << 16 | 12 << 24, 15, 0x01);
             heart_count += 1;
+            audio.collect.play();
             continue;
         } else if (dist < 32) {
             const towards = geom.vec2.normalizef(player - collectable[0]);
