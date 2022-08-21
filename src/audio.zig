@@ -1,5 +1,7 @@
 const w4 = @import("wasm4.zig");
 const std = @import("std");
+const debug = false;
+const verbosity = 0;
 
 pub const music = struct {
     pub const Flag = struct {
@@ -188,33 +190,33 @@ pub const music = struct {
             // Write control events
             try writer.writeInt(u16, @intCast(u16, ctx.events.len), .Little);
             for (ctx.events) |event, i| {
-                std.log.warn("[wae] -- event {} {}", .{ i, event });
+                if (debug and verbosity > 1) std.log.warn("[wae] -- event {} {}", .{ i, event });
                 try event.write(writer);
             }
-            std.log.warn("[wae] wrote {} events", .{ctx.events.len});
+            if (debug and verbosity > 1) std.log.warn("[wae] wrote {} events", .{ctx.events.len});
 
             // Write song offsets
             try writer.writeInt(u16, @intCast(u16, ctx.songs.len), .Little);
             for (ctx.songs) |song, i| {
-                std.log.warn("[wae] -- song {} {}", .{ i, song });
+                if (debug and verbosity > 1) std.log.warn("[wae] -- song {} {}", .{ i, song });
                 try writer.writeInt(u16, song, .Little);
             }
-            std.log.warn("[wae] wrote {} song offsets", .{ctx.songs.len});
+            if (debug and verbosity > 1) std.log.warn("[wae] wrote {} song offsets", .{ctx.songs.len});
 
             // Write song data
             try writer.writeInt(u16, @intCast(u16, ctx.song_events.len), .Little);
             for (ctx.song_events) |control_event, i| {
-                std.log.warn("[wae] -- song event {} {}", .{ i, control_event });
+                if (debug and verbosity > 1) std.log.warn("[wae] -- song event {} {}", .{ i, control_event });
                 try control_event.write(writer);
             }
-            std.log.warn("[wae] wrote {} song events", .{ctx.song_events.len});
+            if (debug and verbosity > 1) std.log.warn("[wae] wrote {} song events", .{ctx.song_events.len});
 
             // try writer.writeInt(u16, @intCast(u16, ctx.patterns.len), .Little);
             // for (ctx.patterns) |pattern, i| {
-            //     std.log.warn("[wae] -- pattern {} {}", .{i, pattern});
+            //     if (debug and verbosity > 1) std.log.warn("[wae] -- pattern {} {}", .{i, pattern});
             //     try writer.writeInt(u16, pattern, .Little);
             // }
-            // std.log.warn("[wae] wrote {} patterns", .{ctx.patterns.len});
+            // if (debug and verbosity > 1) std.log.warn("[wae] wrote {} patterns", .{ctx.patterns.len});
         }
     };
 
@@ -247,7 +249,7 @@ pub const music = struct {
             const events_len = try reader.readInt(u16, .Little);
             const events_start = @intCast(u32, try cursor.getPos());
 
-            w4.tracef("[audio context init] events_len=%d", events_len);
+            if (debug and verbosity > 1) w4.tracef("[audio context init] events_len=%d", events_len);
 
             var eventi: usize = 0;
             while (eventi < events_len) : (eventi += 1) {
@@ -259,22 +261,22 @@ pub const music = struct {
             // const songs_bytes = songs_len * @sizeOf(u16);
             const songs = @ptrCast([]u16, buffer[songs_start .. songs_start + songs_len]);
 
-            w4.tracef("[audio context init] song_len=%d", songs_len);
+            if (debug and verbosity > 1) w4.tracef("[audio context init] song_len=%d", songs_len);
             var songi: usize = 0;
             while (songi < songs_len) : (songi += 1) {
                 const song = try reader.readInt(u16, .Little);
-                w4.tracef("[audio context init] song %d: %d", songi, song);
+                if (debug and verbosity > 1) w4.tracef("[audio context init] song %d: %d", songi, song);
             }
 
             const song_events_len = try reader.readInt(u16, .Little);
             const song_events_start = @intCast(u32, try cursor.getPos());
 
-            w4.tracef("[audio context init] song_events_len=%d", song_events_len);
+            if (debug and verbosity > 1) w4.tracef("[audio context init] song_events_len=%d", song_events_len);
 
             var idx_s_e: usize = 0;
             while (idx_s_e < song_events_len) : (idx_s_e += 1) {
                 const event = try ControlEvent.read(reader);
-                w4.tracef("[audio context init] song %d: %s", idx_s_e, @tagName(event).ptr);
+                if (debug and verbosity > 1) w4.tracef("[audio context init] song %d: %s", idx_s_e, @tagName(event).ptr);
             }
 
             // const patterns_len = try reader.readInt(u16, .Little);
@@ -282,9 +284,9 @@ pub const music = struct {
             // // const patterns_bytes = patterns_len * @sizeOf(u16);
             // const patterns = @ptrCast([]u16, buffer[patterns_start..patterns_start + patterns_len]);
 
-            // w4.tracef("[audio context init] patterns_len=%d", patterns_len);
+            // if (debug and verbosity > 1) w4.tracef("[audio context init] patterns_len=%d", patterns_len);
             // for (patterns) |pattern, i| {
-            //     w4.tracef("[audio context init] patterns %d: %d", i, pattern);
+            //     if (debug and verbosity > 1) w4.tracef("[audio context init] patterns %d: %d", i, pattern);
             // }
 
             return Context{
@@ -440,7 +442,7 @@ pub const music = struct {
             var song_reader = this.song_reader orelse return false;
             var event = this.current_song_event orelse ControlEvent.read(song_reader) catch @panic("_controlUpdate");
             while (this.next_update_tick <= this.tick_count) {
-                w4.tracef("[wae controlupdate] %s", @tagName(event).ptr);
+                if (debug and verbosity > 1) w4.tracef("[wae controlupdate] %s", @tagName(event).ptr);
                 switch (event) {
                     .play => |p| {
                         // Look up byte offset in pattern table
@@ -453,7 +455,7 @@ pub const music = struct {
                     },
                     .wait => |w| {
                         this.next_update_tick = this.tick_count + w;
-                        w4.tracef("[wae controlupdate] wait %d until %d", w, this.next_update_tick);
+                        if (debug and verbosity > 1) w4.tracef("[wae controlupdate] wait %d until %d", w, this.next_update_tick);
                     },
                     .goto => |n| {
                         // Find the nth item
@@ -500,7 +502,7 @@ pub const music = struct {
                 // Wait to play note until current note finishes
                 if (event == .note and this.tick_count < state.next_channel_tick.*) continue;
                 while (state.next_channel_tick.* <= this.tick_count) {
-                    w4.tracef("[wae update] eh2 %s, %d", @tagName(event).ptr, state.cursor.*.?.pos);
+                    if (debug and verbosity > 1) w4.tracef("[wae update] eh2 %s, %d", @tagName(event).ptr, state.cursor.*.?.pos);
                     switch (event) {
                         .end => {
                             // state.cursor.*.?.seekTo(state.pattern.*) catch @panic("wae update");

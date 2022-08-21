@@ -2,6 +2,8 @@
 const std = @import("std");
 const audio = @import("../src/audio.zig");
 const music = audio.music;
+const debug = false;
+const verbosity = 0;
 
 const KB = 1024;
 const MB = 1024 * KB;
@@ -55,7 +57,7 @@ fn make(step: *std.build.Step) !void {
     }
 
     for (music_data.song_events) |control_event, e| {
-        std.log.warn("[wael] [{}] {}", .{e, control_event});
+        if (debug and verbosity > 1) std.log.warn("[wael] [{}] {}", .{e, control_event});
     }
 
     // Create array to write data to
@@ -573,7 +575,7 @@ pub fn parse(alloc: std.mem.Allocator, buf: []const u8) !WriteContext {
     var songlist_offsets = try alloc.alloc(u16, songlist.items.len);
     var sum: usize = 0;
     var count: usize = 0;
-    std.log.warn("[wael] summing", .{});
+    if (debug and verbosity > 1) std.log.warn("[wael] summing", .{});
     for (songlist.items) |*song, i| {
         songlist_offsets[i] = @intCast(u16, sum);
         for (song.items) |control_event| {
@@ -581,19 +583,19 @@ pub fn parse(alloc: std.mem.Allocator, buf: []const u8) !WriteContext {
         }
         count += song.items.len;
     }
-    std.log.warn("[wael] count is {}, byte sum is {}", .{count, sum});
+    if (debug and verbosity > 1) std.log.warn("[wael] count is {}, byte sum is {}", .{count, sum});
 
     var songlist_events = try alloc.alloc(music.ControlEvent, count);
     var index: usize = 0;
     for (songlist.items) |song| {
         for (song.items) |control_event| {
-            // std.log.warn("[wael] [{}] {}", .{index, control_event});
+            // if (debug and verbosity > 1) std.log.warn("[wael] [{}] {}", .{index, control_event});
             songlist_events[index] = control_event;
             index += 1;
         }
         song.deinit();
     }
-    std.log.warn("[wael] index is {}", .{index});
+    if (debug and verbosity > 1) std.log.warn("[wael] index is {}", .{index});
     std.debug.assert(index == count);
 
     return music.WriteContext{
