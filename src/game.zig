@@ -183,7 +183,7 @@ fn loadRoom() !void {
                     .anim_template = &world.SkeletonAnimCombatTemplate,
                     .template = &Actor.Template.Skeleton,
                     .hurtbox_vertical = .{ -8, -8, 16, 12 },
-                    .hurtbox_horizontal = .{ 0, -10, 12, 16 },
+                    .hurtbox_horizontal = .{ -4, -10, 12, 16 },
                 } };
                 combat_idx += 1;
             },
@@ -250,7 +250,6 @@ pub fn update(time: usize) !void {
 
         if (!player_combat.is_attacking) {
             player.input_vector = input_vector;
-            if (player.motive and player_combat.is_attacking) player_combat.endAttack();
             if (input.btnp(.one, .z)) {
                 player_combat.startAttack(time);
                 audio.punch.play();
@@ -279,19 +278,42 @@ pub fn update(time: usize) !void {
             const player_dist = geom.vec2.distf(actor.pos, player.pos);
             const view = geom.vec2.dot(player_dir, (intelligence.player_dir orelse actor.facing).getVec2f());
             var int_input_vector = geom.Vec2f{ 0, 0 };
-            if (intelligence.follow_player) {
+            if (intelligence.track_player) {
                 if (view > 0) {
                     if (view > 0.5) {
                         intelligence.player_dir = geom.Direction.fromVec2f(player_dir);
-                        if (player_dist > intelligence.approach_distance) {
-                            int_input_vector = player_dir;
-                        } else if (player_dist < intelligence.backup_distance) {
-                            int_input_vector = -player_dir;
-                        } else {}
                     }
                 } else {
                     intelligence.player_dir = null;
-                    if (player_dist < 16) intelligence.player_dir = geom.Direction.fromVec2f(player_dir);
+                    // TODO add field to intelligence
+                    if (player_dist < intelligence.track_omni_dist) intelligence.player_dir = geom.Direction.fromVec2f(player_dir);
+                }
+            }
+            var attacking = false;
+            var attack_ready = false;
+            var combat_idx_opt = Assoc(Combat).get(combats, intAssoc.key);
+            if (combat_idx_opt) |combat_idx| {
+                var combat = &combats[combat_idx].val;
+                attack_ready = time - combat.last_attacking > intelligence.attack_cooldown;
+                if (!combat.is_attacking) {
+                    if (intelligence.player_dir) |_| {
+                        if (player_dist < intelligence.attack_distance and attack_ready) {
+                            attacking = true;
+                            combat.startAttack(time);
+                        }
+                    }
+                } else {
+                    attacking = true;
+                    if (combat.isOver(time)) combat.endAttack();
+                }
+            }
+            if (intelligence.follow_player) {
+                if (intelligence.player_dir) |dir| {
+                    if (player_dist > intelligence.approach_distance or attack_ready) {
+                        int_input_vector = dir.getVec2f();
+                    } else if (player_dist < intelligence.backup_distance and !attacking) {
+                        int_input_vector = -dir.getVec2f();
+                    }
                 }
             }
             for (intelligences) |otherAssoc| {
@@ -372,8 +394,8 @@ pub fn update(time: usize) !void {
         // Animation
         var animator = &anim.val;
         var actor = &actors.items[anim.key];
-        var combat_idx_opt = Assoc(Combat).get(combats, anim.key);
         var animation_chosen = false;
+        var combat_idx_opt = Assoc(Combat).get(combats, anim.key);
         if (combat_idx_opt) |combat_idx| {
             var combat = &combats[combat_idx].val;
             animation_chosen = !combat.isOver(time);
