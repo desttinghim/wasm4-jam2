@@ -30,8 +30,7 @@ pub fn endAttack(this: *Combat) void {
 
 /// Relative to offset
 pub fn getHurtbox(this: Combat, now: usize) ?geom.AABBf {
-    const attack_time = now - this.last_attacking;
-    if (!(this.is_attacking and attack_time < this.attack_uninterruptable)) return null;
+    if (this.isInterruptable(now)) return null;
     // This will be called after startAttack, so last_attack == 0 is flipped
     var offset = this.actor.facing.getVec2f() * @splat(2, @as(f32, 8));
     const chain_offset_x: f32 = x: {

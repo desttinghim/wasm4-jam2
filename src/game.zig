@@ -381,8 +381,10 @@ pub fn update(time: usize) !void {
                 actor.setTemplate(combat.template);
                 if (actor.facing == .South) {
                     animator.play(combat.anim_template.punch_down[combat.last_attack]);
+                    actor.image.flags.flip_x = combat.last_attack == 1;
                 } else if (combat.actor.facing == .North) {
                     animator.play(combat.anim_template.punch_up[combat.last_attack]);
+                    actor.image.flags.flip_x = combat.last_attack == 1;
                 } else {
                     animator.play(combat.anim_template.punch_side[combat.last_attack]);
                     actor.image.flags.flip_x = actor.facing == .West or actor.facing == .Northwest or actor.facing == .Southwest;
@@ -391,13 +393,15 @@ pub fn update(time: usize) !void {
                 actor.setTemplate(animator.template);
             }
         }
+        if (!animation_chosen) {
+            actor.image.flags.flip_x = actor.facing == .West or actor.facing == .Northwest or actor.facing == .Southwest;
+        }
         if (!animation_chosen and actor.motive and animator.interruptable) {
             animation_chosen = true;
             switch (actor.facing) {
                 .Northwest, .Northeast, .North => animator.play(actor.template.animation.walk_up),
                 .Southwest, .Southeast, .South => animator.play(actor.template.animation.walk_down),
                 .West => {
-                    actor.image.flags.flip_x = true;
                     animator.play(actor.template.animation.walk_side);
                 },
                 .East => {
