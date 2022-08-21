@@ -5,77 +5,73 @@ const Actor = @import("Actor.zig");
 
 const Combat = @This();
 
-animator: *Anim,
+anim_template: *const Anim.CombatTemplate,
+template: *const Actor.Template,
 actor: *Actor,
 is_attacking: bool = false,
 last_attacking: usize = 0,
 last_attack: usize = 0,
 chain: u8 = 0,
 
-actorImage: draw.Blit,
-// actorOffset: geom.Vec2f,
-actorTemplate: *const Actor.Template,
-template: *const Actor.Template,
-// offset: geom.Vec2f,
-image: draw.Blit,
-punch_down: [2][]const Anim.Ops,
-punch_up: [2][]const Anim.Ops,
-punch_side: [2][]const Anim.Ops,
+// Attack timings. Times stack
+attack_uninterruptable: usize = 10,
+attack_combo: usize = 35,
+attack_end: usize = 10,
+
+hurtbox_vertical: geom.AABBf,
+hurtbox_horizontal: geom.AABBf,
 
 pub fn endAttack(this: *Combat) void {
     this.chain = 0;
     this.is_attacking = false;
-    this.actor.image = this.actorImage;
-    this.actor.template = this.actorTemplate;
-    // this.actor.offset = this.actorOffset;
-    this.actor.image.flags.flip_x = this.actor.facing == .West;
     // Arrest momentum
     this.actor.last_pos = this.actor.pos;
-    this.actor.friction = 0.5;
-    // this.actor.body = .Kinematic;
 }
 
 /// Relative to offset
-pub fn getHurtbox(this: Combat) ?geom.AABBf {
-    if (!(this.is_attacking and !this.animator.interruptable)) return null;
+pub fn getHurtbox(this: Combat, now: usize) ?geom.AABBf {
+    const attack_time = now - this.last_attacking;
+    if (!(this.is_attacking and attack_time < this.attack_uninterruptable)) return null;
     // This will be called after startAttack, so last_attack == 0 is flipped
     var offset = this.actor.facing.getVec2f() * @splat(2, @as(f32, 8));
     const chain_offset_x: f32 = x: {
-        if (offset[1] > 0.01 or offset[1] < 0.01) {
-            break :x if (this.last_attack == 0) @as(f32, -8) else -12;
+        if (@fabs(offset[1]) > 0.01) {
+            break :x if (this.last_attack == 0) @as(f32, -0) else -4;
         } else {
             break :x 0;
         }
     };
     offset[0] += chain_offset_x;
     const hurtbox: geom.AABBf = switch (this.actor.facing) {
-        .Northwest, .Northeast, .North, .Southwest, .Southeast, .South => .{ 0, -8, 16, 12 },
-        .West, .East => .{ 0, -10, 12, 16 },
+        .Northwest, .Northeast, .North, .Southwest, .Southeast, .South => this.hurtbox_vertical,
+        .West, .East => this.hurtbox_horizontal,
     };
     return geom.aabb.addvf(hurtbox, offset);
 }
 
+pub fn isInterruptable(this: Combat, now: usize) bool {
+    const attack_time = now - this.last_attacking;
+    return attack_time > this.attack_uninterruptable;
+}
+
+pub fn isCombo(this: Combat, now: usize) bool {
+    const attack_time = now - this.last_attacking;
+    return attack_time > this.attack_uninterruptable + this.attack_combo and attack_time < this.attack_uninterruptable + this.attack_combo + this.attack_end;
+}
+
+pub fn isOver(this: Combat, now: usize) bool {
+    return this.isInterruptable(now) and !this.isCombo(now);
+}
+
 pub fn startAttack(this: *Combat, now: usize) void {
-    if (!this.animator.interruptable) {
+    if (!this.isInterruptable(now)) {
         this.chain = 0;
         return;
     }
-    if (now - this.last_attacking <= 45) {
+    if (this.isCombo(now)) {
         this.chain +|= 1;
-    }
-    this.actor.image = this.image;
-    this.actor.template = this.template;
-    // this.actor.offset = this.offset;
-    if (this.actor.facing == .South) {
-        this.animator.play(this.punch_down[this.last_attack]);
-    } else if (this.actor.facing == .North) {
-        this.animator.play(this.punch_up[this.last_attack]);
-    } else {
-        this.animator.play(this.punch_side[this.last_attack]);
-        this.actor.image.flags.flip_x = this.actor.facing == .West or this.actor.facing == .Northwest or this.actor.facing == .Southwest;
     }
     this.is_attacking = true;
     this.last_attacking = now;
     this.last_attack = (this.last_attack + 1) % 2;
-    this.actor.friction = 0.85;
 }

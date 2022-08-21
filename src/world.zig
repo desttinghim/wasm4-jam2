@@ -27,9 +27,42 @@ pub const pot = 135;
 pub const heart = 129;
 pub const skeleton = 124;
 
+const pot_anim = Anim.frame(pot);
+pub const PotAnimActorTemplate = Anim.ActorTemplate{
+    .stand_down = &pot_anim,
+    .stand_up = &pot_anim,
+    .stand_side = &pot_anim,
+    .walk_down = &pot_anim,
+    .walk_up = &pot_anim,
+    .walk_side = &pot_anim,
+};
+
+const skeleton_anim = Anim.frame(skeleton);
+pub const SkeletonAnimActorTemplate = Anim.ActorTemplate{
+    .stand_down = &skeleton_anim,
+    .stand_up = &skeleton_anim,
+    .stand_side = &skeleton_anim,
+    .walk_down = &skeleton_anim,
+    .walk_up = &skeleton_anim,
+    .walk_side = &skeleton_anim,
+};
+pub const SkeletonAnimCombatTemplate = Anim.CombatTemplate{
+    .punch_down = .{ &skeleton_anim, &skeleton_anim },
+    .punch_up = .{ &skeleton_anim, &skeleton_anim },
+    .punch_side = .{ &skeleton_anim, &skeleton_anim },
+};
+
 pub const player_style = 0x4300;
 pub const player_bmp = draw.Bitmap{ .data = &assets.mc, .width = assets.mc_width, .height = assets.mc_height };
 pub const player_punch_bmp = draw.Bitmap{ .data = &assets.mc_punch, .width = assets.mc_punch_width, .height = assets.mc_punch_height };
+pub const PlayerAnimActorTemplate = Anim.ActorTemplate{
+    .stand_down = &player_anim_stand_down,
+    .stand_up = &player_anim_stand_up,
+    .stand_side = &player_anim_stand_side,
+    .walk_down = &player_anim_walk_down,
+    .walk_up = &player_anim_walk_up,
+    .walk_side = &player_anim_walk_side,
+};
 pub const player_anim_stand_down = [_]Anim.Ops{ .{ .Index = 0 }, .Stop };
 pub const player_anim_walk_down = [_]Anim.Ops{
     .{ .Index = 1 }, .{ .Wait = 8 },
@@ -52,6 +85,11 @@ pub const player_anim_walk_side = [_]Anim.Ops{
     .{ .Index = 12 }, .{ .Wait = 8 },
     .{ .Index = 13 }, .{ .Wait = 8 },
     .{ .Index = 14 }, .{ .Wait = 8 },
+};
+pub const PlayerAnimCombatTemplate = Anim.CombatTemplate{
+    .punch_down = .{ &player_anim_punch_down, &player_anim_punch_down2 },
+    .punch_up = .{ &player_anim_punch_up, &player_anim_punch_up2 },
+    .punch_side = .{ &player_anim_punch_side, &player_anim_punch_side2 },
 };
 pub const player_anim_punch_down = [_]Anim.Ops{
     .NoInterrupt,

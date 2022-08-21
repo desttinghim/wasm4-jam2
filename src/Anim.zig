@@ -1,4 +1,20 @@
 const BlitFlags = @import("draw.zig").BlitFlags;
+const Actor = @import("Actor.zig");
+
+pub const CombatTemplate = struct {
+    punch_down: [2][]const Ops,
+    punch_up: [2][]const Ops,
+    punch_side: [2][]const Ops,
+};
+
+pub const ActorTemplate = struct {
+    walk_down: []const Ops,
+    walk_up: []const Ops,
+    walk_side: []const Ops,
+    stand_down: []const Ops,
+    stand_up: []const Ops,
+    stand_side: []const Ops,
+};
 
 time: usize = 0,
 currentOp: usize = 0,
@@ -7,6 +23,8 @@ anim: []const Ops,
 stopped: bool = false,
 flipped: bool = false,
 interruptable: bool = true,
+// TODO find the right place for this
+template: *const Actor.Template,
 
 pub const Ops = union(enum) { Index: usize, Wait: usize, FlipX, SetFlipX: bool, Stop, NoInterrupt, AllowInterrupt };
 

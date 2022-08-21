@@ -44,34 +44,20 @@ const Health = @import("Health.zig");
 const Renderable = @import("Renderable.zig");
 const Intelligence = @import("Intelligence.zig");
 
-const player_blit = draw.Blit.init_frame(world.player_style, &world.player_bmp, .{ .bpp = .b2 }, .{ 16, 16 }, 0);
-const player_offset = geom.Vec2f{ -8, -12 };
-var playerIndex: usize = undefined;
-var player_combat = Combat{
-    .actorImage = player_blit,
-    .actorTemplate = &Actor.Template.Player,
-    .template = &Actor.Template.PlayerAttack,
-    // .actorOffset = player_offset,
-    .actor = undefined,
-    .animator = undefined,
-    // .offset = geom.Vec2f{ -16, -20 },
-    .image = draw.Blit.init_frame(world.player_style, &world.player_punch_bmp, .{ .bpp = .b2 }, .{ 32, 32 }, 0),
-    .punch_down = .{ &world.player_anim_punch_down, &world.player_anim_punch_down2 },
-    .punch_up = .{ &world.player_anim_punch_up, &world.player_anim_punch_up2 },
-    .punch_side = .{ &world.player_anim_punch_side, &world.player_anim_punch_side2 },
-};
-var bounds: geom.Rectf = undefined;
-var camera = geom.Vec2f{ 0, 0 };
-var camera_player_pos = geom.Vec2f{ 0, 0 };
-var playerStore: Actor = undefined;
-var heart_count: usize = 0;
-
 var actors: std.ArrayList(Actor) = undefined;
 // var collectable_list: std.ArrayList([2]geom.Vec2f) = undefined;
 var collectables: [][2]geom.Vec2f = &.{};
 var animators: []Assoc(Anim) = undefined;
 var health: []Assoc(Health) = undefined;
 var intelligences: []Assoc(Intelligence) = undefined;
+var combats: []Assoc(Combat) = undefined;
+
+var playerIndex: usize = undefined;
+var bounds: geom.Rectf = undefined;
+var camera = geom.Vec2f{ 0, 0 };
+var camera_player_pos = geom.Vec2f{ 0, 0 };
+var playerStore: Actor = undefined;
+var heart_count: usize = 0;
 
 var db: Database = undefined;
 // var wae: audio.music.WAE = undefined;
@@ -91,13 +77,7 @@ pub fn start() !void {
     {
         const tile_sizef = geom.vec2.itof(world.tile_size);
         const pos = spawn.toPos() + (tile_sizef / @splat(2, @as(f32, 2)));
-        playerStore = Actor{
-            .template = &Actor.Template.Player,
-            .pos = pos,
-            .last_pos = pos,
-            .friction = 0.5,
-            .image = player_blit,
-        };
+        playerStore = Actor.init(&Actor.Template.Player, pos);
     }
 
     try loadRoom();
@@ -113,8 +93,7 @@ fn loadRoom() !void {
     try actors.append(playerStore);
 
     // Declare animator component count (player is implicitly counted)
-    var needs_animator: usize = 1;
-    // TODO: give player a health stat
+    var needs_animator: usize = 0;
     var needs_health: usize = 0;
     var needs_combat: usize = 0;
     var needs_intelligence: usize = 0;
@@ -124,34 +103,28 @@ fn loadRoom() !void {
         const tile_sizef = geom.vec2.itof(world.tile_size);
         const pos = entity.toPos() + (tile_sizef / @splat(2, @as(f32, 2)));
         switch (entity.kind) {
-            .Player => {},
+            .Player => {
+                needs_health += 1;
+                needs_animator += 1;
+                needs_combat += 1;
+            },
             .Pot => {
                 needs_health += 1;
-                try actors.append(Actor{
-                    .template = &Actor.Template.Pot,
-                    .pos = pos,
-                    .last_pos = pos,
-                    .image = draw.Blit.init_frame(0x0243, &world.bitmap, .{ .bpp = .b2 }, .{ 16, 16 }, world.pot),
-                });
+                try actors.append(Actor.init(&Actor.Template.Pot, pos));
             },
             .Skeleton => {
                 needs_health += 1;
                 needs_intelligence += 1;
                 needs_combat += 1;
-                try actors.append(Actor{
-                    .template = &Actor.Template.Skeleton,
-                    .pos = pos,
-                    .last_pos = pos,
-                    .friction = 0.5,
-                    .image = draw.Blit.init_frame(0x0243, &world.bitmap, .{ .bpp = .b2 }, .{ 16, 16 }, world.skeleton),
-                });
+                try actors.append(Actor.init(&Actor.Template.Skeleton, pos));
             },
         }
     }
 
     // Allocate animators
-    animators = try level_alloc.alloc(Assoc(Anim), needs_animator);
     health = try level_alloc.alloc(Assoc(Health), needs_health);
+    combats = try level_alloc.alloc(Assoc(Combat), needs_combat);
+    animators = try level_alloc.alloc(Assoc(Anim), needs_animator);
     intelligences = try level_alloc.alloc(Assoc(Intelligence), needs_intelligence);
 
     if (debug and verbosity > 0) w4.tracef("[start] Anim count %d", needs_animator);
@@ -159,25 +132,60 @@ fn loadRoom() !void {
     var anim_idx: usize = 0;
     var health_idx: usize = 0;
     var intelligence_idx: usize = 0;
+    var combat_idx: usize = 0;
     for (actors.items) |actor, a| {
         switch (actor.template.kind) {
             .Player => {
                 animators[anim_idx] = .{ .key = a, .val = .{
                     .anim = &world.player_anim_walk_down,
+                    .template = &Actor.Template.Player,
                 } };
-                player_combat.animator = &animators[anim_idx].val;
-                player_combat.actor = &actors.items[a];
                 anim_idx += 1;
+                health[health_idx] = .{ .key = a, .val = .{
+                    .max = 2,
+                    .current = 2,
+                    .stunTime = 60,
+                    .hitbox = .{ -4, -4, 8, 8 },
+                } };
+                health_idx += 1;
+                combats[combat_idx] = .{ .key = a, .val = Combat{
+                    .actor = &actors.items[a],
+                    .anim_template = &world.PlayerAnimCombatTemplate,
+                    .template = &Actor.Template.PlayerAttack,
+                    .hurtbox_vertical = .{ -8, -8, 16, 12 },
+                    .hurtbox_horizontal = .{ -4, -10, 12, 16 },
+                } };
+                combat_idx += 1;
             },
             .Pot => {
-                health[health_idx] = .{ .key = a, .val = .{ .max = 2, .current = 2, .stunTime = 60, .hitbox = .{ -4, -4, 8, 8 } } };
+                health[health_idx] = .{ .key = a, .val = .{
+                    .max = 2,
+                    .current = 2,
+                    .stunTime = 60,
+                    .hitbox = .{ -4, -4, 8, 8 },
+                } };
                 health_idx += 1;
             },
             .Skeleton => {
-                health[health_idx] = .{ .key = a, .val = .{ .max = 2, .current = 2, .stunTime = 60, .hitbox = .{ -4, -4, 8, 8 } } };
+                health[health_idx] = .{ .key = a, .val = .{
+                    .max = 2,
+                    .current = 2,
+                    .stunTime = 60,
+                    .hitbox = .{ -4, -4, 8, 8 },
+                } };
                 health_idx += 1;
-                intelligences[intelligence_idx] = .{ .key = a, .val = .{ .follow_player = true } };
+                intelligences[intelligence_idx] = .{ .key = a, .val = .{
+                    .follow_player = true,
+                } };
                 intelligence_idx += 1;
+                combats[combat_idx] = .{ .key = a, .val = Combat{
+                    .actor = &actors.items[a],
+                    .anim_template = &world.SkeletonAnimCombatTemplate,
+                    .template = &Actor.Template.Skeleton,
+                    .hurtbox_vertical = .{ -8, -8, 16, 12 },
+                    .hurtbox_horizontal = .{ 0, -10, 12, 16 },
+                } };
+                combat_idx += 1;
             },
         }
     }
@@ -216,6 +224,7 @@ pub fn update(time: usize) !void {
     for (actors.items) |*actor| {
         actor.bounced = false;
         actor.motive = false;
+        actor.input_vector = geom.Vec2f{ 0, 0 };
         if (actor.stunned) |stunTime| {
             if (time - stunTime > actor.template.stunPeriod) {
                 actor.stunned = null;
@@ -236,28 +245,29 @@ pub fn update(time: usize) !void {
         if (input.btn(.one, .down)) input_vector += geom.Vec2f{ 0, 1 };
 
         input_vector = geom.vec2.normalizef(input_vector);
+        var player_combat = &combats[Assoc(Combat).get(combats, playerIndex).?].val;
+        // var player_animator = &animators[Assoc(Anim).get(animators, playerIndex).?].val;
 
         if (!player_combat.is_attacking) {
-            player.move(input_vector);
+            player.input_vector = input_vector;
             if (player.motive and player_combat.is_attacking) player_combat.endAttack();
             if (input.btnp(.one, .z)) {
                 player_combat.startAttack(time);
                 audio.punch.play();
             }
-        } else if (!player_combat.animator.interruptable) {
-            player.move(player.facing.getVec2f());
+        } else if (!player_combat.isInterruptable(time)) {
+            player.input_vector = player.facing.getVec2f();
         } else {
             if (geom.Direction.fromVec2f(input_vector)) |facing| {
                 player.facing = facing;
             }
-            const delta = time - player_combat.last_attacking;
-            if (delta > 25 and input.btnp(.one, .z)) {
+            if (input.btnp(.one, .z)) {
                 player_combat.startAttack(time);
                 var punch = audio.punch;
                 punch.fstart += player_combat.chain;
                 punch.play();
             }
-            if (delta > 40) player_combat.endAttack();
+            if (player_combat.isOver(time)) player_combat.endAttack();
         }
 
         for (intelligences) |*intAssoc| {
@@ -297,7 +307,11 @@ pub fn update(time: usize) !void {
                     break;
                 }
             }
-            actor.move(int_input_vector);
+            actor.input_vector = int_input_vector;
+        }
+
+        for (actors.items) |*actor| {
+            actor.move();
         }
 
         {
@@ -352,29 +366,51 @@ pub fn update(time: usize) !void {
                 player.last_pos = player.pos;
             }
         }
+    }
 
+    for (animators) |*anim| {
         // Animation
-        var animator = player_combat.animator;
-        if (player.motive and animator.interruptable) {
-            switch (player.facing) {
-                .Northwest, .Northeast, .North => animator.play(&world.player_anim_walk_up),
-                .Southwest, .Southeast, .South => animator.play(&world.player_anim_walk_down),
+        var animator = &anim.val;
+        var actor = &actors.items[anim.key];
+        var combat_idx_opt = Assoc(Combat).get(combats, anim.key);
+        var animation_chosen = false;
+        if (combat_idx_opt) |combat_idx| {
+            var combat = &combats[combat_idx].val;
+            animation_chosen = !combat.isOver(time);
+            if (combat.is_attacking and actor.template != combat.template) {
+                actor.setTemplate(combat.template);
+                if (actor.facing == .South) {
+                    animator.play(combat.anim_template.punch_down[combat.last_attack]);
+                } else if (combat.actor.facing == .North) {
+                    animator.play(combat.anim_template.punch_up[combat.last_attack]);
+                } else {
+                    animator.play(combat.anim_template.punch_side[combat.last_attack]);
+                    actor.image.flags.flip_x = actor.facing == .West or actor.facing == .Northwest or actor.facing == .Southwest;
+                }
+            } else if (combat.isOver(time) and actor.template != animator.template) {
+                actor.setTemplate(animator.template);
+            }
+        }
+        if (!animation_chosen and actor.motive and animator.interruptable) {
+            animation_chosen = true;
+            switch (actor.facing) {
+                .Northwest, .Northeast, .North => animator.play(actor.template.animation.walk_up),
+                .Southwest, .Southeast, .South => animator.play(actor.template.animation.walk_down),
                 .West => {
-                    player.image.flags.flip_x = true;
-                    animator.play(&world.player_anim_walk_side);
+                    actor.image.flags.flip_x = true;
+                    animator.play(actor.template.animation.walk_side);
                 },
                 .East => {
-                    player.image.flags.flip_x = false;
-                    animator.play(&world.player_anim_walk_side);
+                    actor.image.flags.flip_x = false;
+                    animator.play(actor.template.animation.walk_side);
                 },
             }
-        } else {
-            if (!player_combat.is_attacking) {
-                switch (player.facing) {
-                    .Northwest, .Northeast, .North => animator.play(&world.player_anim_stand_up),
-                    .Southwest, .Southeast, .South => animator.play(&world.player_anim_stand_down),
-                    .West, .East => animator.play(&world.player_anim_stand_side),
-                }
+        }
+        if (!animation_chosen) {
+            switch (actor.facing) {
+                .Northwest, .Northeast, .North => animator.play(actor.template.animation.stand_up),
+                .Southwest, .Southeast, .South => animator.play(actor.template.animation.stand_down),
+                .West, .East => animator.play(actor.template.animation.stand_side),
             }
         }
     }
@@ -460,11 +496,13 @@ pub fn update(time: usize) !void {
         }
     }
 
-    if (player_combat.getHurtbox()) |hurtbox| {
-        try hurtboxes.append(.{
-            .key = playerIndex,
-            .val = geom.aabb.as_rectf(geom.aabb.addvf(hurtbox, actors.items[playerIndex].pos)),
-        });
+    for (combats) |combat| {
+        if (combat.val.getHurtbox(time)) |hurtbox| {
+            try hurtboxes.append(.{
+                .key = combat.key,
+                .val = geom.aabb.as_rectf(geom.aabb.addvf(hurtbox, actors.items[combat.key].pos)),
+            });
+        }
     }
 
     for (collectables) |*collectable| {
@@ -607,13 +645,13 @@ pub fn update(time: usize) !void {
         }
     }
 
-    if (debug) {
-        w4.DRAW_COLORS.* = 0x0041;
-        var chain_text: [9:0]u8 = .{ 'C', 'H', 'A', 'I', 'N', ':', ' ', ' ', 0 };
-        chain_text[6] = '0' + @divTrunc(player_combat.chain, 10);
-        chain_text[7] = '0' + @mod(player_combat.chain, 10);
-        w4.text(&chain_text, 0, 0);
-    }
+    // if (debug) {
+    //     w4.DRAW_COLORS.* = 0x0041;
+    //     var chain_text: [9:0]u8 = .{ 'C', 'H', 'A', 'I', 'N', ':', ' ', ' ', 0 };
+    //     chain_text[6] = '0' + @divTrunc(player_combat.chain, 10);
+    //     chain_text[7] = '0' + @mod(player_combat.chain, 10);
+    //     w4.text(&chain_text, 0, 0);
+    // }
 }
 
 fn render(alloc: std.mem.Allocator, time: usize) !void {
