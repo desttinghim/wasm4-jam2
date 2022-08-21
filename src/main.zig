@@ -75,7 +75,7 @@ var health: []Assoc(Health) = undefined;
 var intelligences: []Assoc(Intelligence) = undefined;
 
 var db: Database = undefined;
-var music: audio.music.Context = undefined;
+var wae: audio.music.WAE = undefined;
 
 var room: world.Room = undefined;
 
@@ -93,7 +93,9 @@ fn start_safe() !void {
     w4.PALETTE.* = .{ 0xe0f8cf, 0x86c06c, 0x644666, 0x100221 };
 
     db = try Database.init(long_alloc);
-    music = try audio.music.Context.read(music_data);
+    const music = try audio.music.Context.init(music_data);
+    wae = audio.music.WAE.init(music);
+    wae.playSong(0);
 
     var spawn: world.Entity = db.getSpawn() orelse return error.PlayerNotFound;
     room = db.getRoomContaining(spawn.toVec()) orelse return error.RoomNotFound;
@@ -216,6 +218,9 @@ var time: usize = 0;
 fn update_safe() !void {
     defer time += 1;
     defer input.update();
+
+    // Update audio engine
+    wae.update();
 
     // Memory management
     // Switch frame allocator every frame

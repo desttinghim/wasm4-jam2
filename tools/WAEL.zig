@@ -48,6 +48,15 @@ fn make(step: *std.build.Step) !void {
 
     // TODO Parse WAEL file
     const music_data = try parse(allocator, source);
+    defer {
+        allocator.free(music_data.songs);
+        allocator.free(music_data.song_events);
+        allocator.free(music_data.events);
+    }
+
+    for (music_data.song_events) |control_event, e| {
+        std.log.warn("[wael] [{}] {}", .{e, control_event});
+    }
 
     // Create array to write data to
     var data = std.ArrayList(u8).init(allocator);
@@ -245,7 +254,7 @@ const SymbolList = std.ArrayList(Symbol);
 /// TODO: Make it work at runtime
 pub fn parse(alloc: std.mem.Allocator, buf: []const u8) !WriteContext {
     var songlist = std.ArrayList(std.ArrayList(music.ControlEvent)).init(alloc);
-    defer songlist.deinit();
+    // defer songlist.deinit();
     var eventlist = std.ArrayList(music.Event).init(alloc);
 
     var currentOctave: u8 = 3;
@@ -539,27 +548,59 @@ pub fn parse(alloc: std.mem.Allocator, buf: []const u8) !WriteContext {
         }
     }
 
-    var songlist_offsets = try alloc.alloc(u16, songlist.items.len);
-    var sum: usize = 0;
-    for (songlist.items) |*song, i| {
-        songlist_offsets[i] = @intCast(u16, sum);
-        sum += song.items.len;
+    // Find all parts/patterns
+    var patterns_index = std.ArrayList(u16).init(alloc);
+    for (symbols.items) |sym| {
+        if (sym.sym == .Part) {
+            try patterns_index.append(@intCast(u16, sym.index));
+        }
     }
 
-    var songlist_events = try alloc.alloc(music.ControlEvent, sum);
-    var index: usize = 0;
-    for (songlist.items) |*song| {
+    // Calculate byte offset
+    var patterns_bytes = std.ArrayList(u16).init(alloc);
+    var event_sum: u16 = 0;
+    for (eventlist.items) |event, i| {
+        for (patterns_index.items) |pattern_index| {
+            if (pattern_index == i) {
+                try patterns_bytes.append(@intCast(u16, event_sum));
+            }
+        }
+        event_sum += event.toByteSize();
+    }
+    std.debug.assert(patterns_bytes.items.len == patterns_index.items.len);
+
+    // Calculate byte size
+    var songlist_offsets = try alloc.alloc(u16, songlist.items.len);
+    var sum: usize = 0;
+    var count: usize = 0;
+    std.log.warn("[wael] summing", .{});
+    for (songlist.items) |*song, i| {
+        songlist_offsets[i] = @intCast(u16, sum);
         for (song.items) |control_event| {
+            sum += control_event.toByteSize();
+        }
+        count += song.items.len;
+    }
+    std.log.warn("[wael] count is {}, byte sum is {}", .{count, sum});
+
+    var songlist_events = try alloc.alloc(music.ControlEvent, count);
+    var index: usize = 0;
+    for (songlist.items) |song| {
+        for (song.items) |control_event| {
+            std.log.warn("[wael] [{}] {}", .{index, control_event});
             songlist_events[index] = control_event;
             index += 1;
         }
         song.deinit();
     }
+    std.log.warn("[wael] index is {}", .{index});
+    std.debug.assert(index == count);
 
     return music.WriteContext{
         .songs = songlist_offsets,
         .song_events = songlist_events,
         .events = eventlist.toOwnedSlice(),
+        .patterns = patterns_bytes.toOwnedSlice(),
     };
 }
 
