@@ -52,14 +52,12 @@ pub const music = struct {
         }
 
         pub fn write(event: Event, writer: anytype) !void {
-            std.log.warn("[event write] {s} {}", .{ @tagName(event), @enumToInt(event) });
             try writer.writeInt(u8, @enumToInt(event), .Little);
             switch (event) {
                 .rest => |rest| {
                     try writer.writeInt(u8, rest.duration, .Little);
                 },
                 .param => |param| {
-                    std.log.warn("[event write] param={}", .{ param });
                     try writer.writeInt(u8, param, .Little);
                 },
                 .adsr => |adsr| {
@@ -82,14 +80,12 @@ pub const music = struct {
         pub fn read(reader: anytype) !Event {
             const int_tag = try reader.readInt(u8, .Little);
             const tag = @intToEnum(EventEnum, int_tag);
-            w4.tracef("[event read] %s event", @tagName(tag).ptr);
             const data = switch (tag) {
                 .rest => Event{ .rest = .{
                     .duration = try reader.readInt(u8, .Little),
                 } },
                 .param => param: {
                     const param = try reader.readInt(u8, .Little);
-                    w4.tracef("[event read] param=%d");
                     break :param Event{ .param = param };
                 },
                 .adsr => Event{ .adsr = try reader.readInt(u32, .Little) },
@@ -101,7 +97,6 @@ pub const music = struct {
                 } },
                 .end => .end,
             };
-            w4.tracef("[event read] finished reading");
             return data;
         }
 
@@ -341,6 +336,7 @@ pub const music = struct {
         context: Context,
         /// Song cursor
         song_cursor: ?Context.Cursor = null,
+        song_reader: ?Context.Cursor.Reader = null,
         current_song_event: ?ControlEvent = null,
         /// Index of the current song
         song: ?u16 = null,
@@ -352,13 +348,14 @@ pub const music = struct {
         tick_count: u32 = 0,
         /// Song event list cursor. Each audio channel has one
         cursors: [4]?Context.Cursor = .{ null, null, null, null },
+        readers: [4]?Context.Cursor.Reader = .{ null, null, null, null },
         /// Last event
         current_event: [4]?Event = .{ null, null, null, null },
 
         /// Next tick to process commands at, per channel
         next_channel_tick: [4]u32 = .{ 0, 0, 0, 0 },
         /// Beginning of current pattern
-        begin: [4]u32 = .{ 0, 0, 0, 0 },
+        patterns: [4]u32 = .{ 0, 0, 0, 0 },
         /// Parameter byte for each channel. Only used by
         /// PULSE1 and PULSE2 for setting duty cycle
         param: [4]u8 = .{ 0, 0, 0, 0 },
@@ -385,10 +382,11 @@ pub const music = struct {
             this.song = null;
             this.current_song_event = null;
             this.next_update_tick = 0;
-            this.begin = .{ 0, 0, 0, 0 };
+            this.patterns = .{ 0, 0, 0, 0 };
             this.tick_count = 0;
             this.next_channel_tick = .{ 0, 0, 0, 0 };
             this.cursors = .{ null, null, null, null };
+            this.readers = .{ null, null, null, null };
             this.current_event = .{ null, null, null, null };
             this.param = .{ 0, 0, 0, 0 };
             this.adsr = .{ 0, 0, 0, 0 };
@@ -401,6 +399,7 @@ pub const music = struct {
             this.reset();
             this.song = song;
             this.song_cursor = this.context.getSongCursor(song);
+            this.song_reader = this.song_cursor.?.reader();
         }
 
         pub fn setNextSong(this: *@This(), song: u16) void {
@@ -412,10 +411,11 @@ pub const music = struct {
         }
 
         const ChannelState = struct {
-            begin: *u32,
+            pattern: *u32,
             current_event: *?Event,
             next_channel_tick: *u32,
-            cursors: *?Context.Cursor,
+            cursor: *?Context.Cursor,
+            reader: *?Context.Cursor.Reader,
             param: *u8,
             adsr: *u32,
             volume: *u8,
@@ -424,10 +424,11 @@ pub const music = struct {
         /// Returns pointers to every register
         fn getChannelState(this: *@This(), channel: usize) ChannelState {
             return ChannelState{
-                .begin = &this.begin[channel],
+                .pattern = &this.patterns[channel],
                 .current_event = &this.current_event[channel],
                 .next_channel_tick = &this.next_channel_tick[channel],
-                .cursors = &this.cursors[channel],
+                .cursor = &this.cursors[channel],
+                .reader = &this.readers[channel],
                 .param = &this.param[channel],
                 .adsr = &this.adsr[channel],
                 .volume = &this.volume[channel],
@@ -436,33 +437,40 @@ pub const music = struct {
         }
 
         pub fn _controlUpdate(this: *@This()) bool {
-            var song_cursor = this.song_cursor orelse return false;
-            var song_reader = song_cursor.reader();
-            var event = ControlEvent.read(song_reader) catch @panic("_controlUpdate");
+            var song_reader = this.song_reader orelse return false;
+            var event = this.current_song_event orelse ControlEvent.read(song_reader) catch @panic("_controlUpdate");
             while (this.next_update_tick <= this.tick_count) {
+                w4.tracef("[wae controlupdate] %s", @tagName(event).ptr);
                 switch (event) {
                     .play => |p| {
                         // Look up byte offset in pattern table
                         const channel = @enumToInt(p.channel);
-                        this.cursors[channel] = this.context.getPatternCursor(p.pattern);
-                        // this.begin[channel] = @intCast(u32, );
-                        var reader = this.cursors[channel].?.reader();
-                        this.current_event[channel] = Event.read(reader) catch @panic("wae controlupdate");
+                        var cursor = this.context.getPatternCursor(p.pattern);
+                        this.cursors[channel] = cursor;
+                        this.readers[channel] = this.cursors[channel].?.reader();
+                        this.patterns[channel] = p.pattern;
+                        this.current_event[channel] = Event.read(this.readers[channel].?) catch @panic("wae controlupdate");
                     },
-                    .wait => |w| this.next_update_tick = this.tick_count + w,
+                    .wait => |w| {
+                        this.next_update_tick = this.tick_count + w;
+                        w4.tracef("[wae controlupdate] wait %d until %d", w, this.next_update_tick);
+                    },
                     .goto => |n| {
                         // Find the nth item
-                        song_cursor.seekTo(this.context.songs[this.song.?]) catch @panic("wae controlupdate");
+                        // this.song_cursor.?.seekTo(this.context.songs[this.song.?]) catch @panic("wae controlupdate");
+                        this.song_cursor = this.context.getSongCursor(this.song.?);
+                        this.song_reader = this.song_cursor.?.reader();
                         var i: usize = 0;
                         while (i < n) : (i += 1) {
-                            _ = ControlEvent.read(song_reader) catch @panic("wae controlupdate");
+                            _ = ControlEvent.read(this.song_reader.?) catch @panic("wae controlupdate");
                         }
                     },
                     .end => {
                         if (this.nextSong) |next| {
                             this.nextSong = null;
-                            this.song_cursor = this.context.getSongCursor(next);
-                            song_reader = song_cursor.reader();
+                            this.playSong(next);
+                            // this.song_cursor = this.context.getSongCursor(next);
+                            // this.song_reader = this.song_cursor.?.reader();
                             // event = song[this.contextCursor];
                             // continue;
                         }
@@ -470,7 +478,8 @@ pub const music = struct {
                     },
                 }
                 // if (event != .goto) this.contextCursor += 1;
-                event = ControlEvent.read(song_reader) catch @panic("wae controlupdate");
+                event = ControlEvent.read(this.song_reader.?) catch @panic("wae controlupdate");
+                this.current_song_event = event;
             }
             return true;
         }
@@ -482,8 +491,7 @@ pub const music = struct {
             // Increment counter at end of function
             defer this.tick_count += 1;
             for (this.cursors) |cursor_opt, i| {
-                var cursor = cursor_opt orelse continue;
-                var reader = cursor.reader();
+                _ = cursor_opt orelse continue;
                 var state = this.getChannelState(i);
                 // Stop once the end of the song is reached
                 // if (state.current_event.* == null) continue;
@@ -492,9 +500,12 @@ pub const music = struct {
                 // Wait to play note until current note finishes
                 if (event == .note and this.tick_count < state.next_channel_tick.*) continue;
                 while (state.next_channel_tick.* <= this.tick_count) {
+                    w4.tracef("[wae update] eh2 %s, %d", @tagName(event).ptr, state.cursor.*.?.pos);
                     switch (event) {
                         .end => {
-                            state.cursors.*.?.seekTo(state.begin.*) catch @panic("wae update");
+                            // state.cursor.*.?.seekTo(state.pattern.*) catch @panic("wae update");
+                            state.cursor.* = this.context.getPatternCursor(@intCast(u16, state.pattern.*));
+                            state.reader.* = state.cursor.*.?.reader();
                         },
                         .param => |param| {
                             // w4.trace("param");
@@ -518,6 +529,7 @@ pub const music = struct {
                             state.next_channel_tick.* = this.tick_count + note.duration;
                         },
                     }
+                    const reader = state.reader.* orelse continue;
                     state.current_event.* = Event.read(reader) catch |e| switch (e) {
                         error.EndOfStream => null,
                     };
