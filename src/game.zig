@@ -6,6 +6,7 @@ const input = @import("input.zig");
 const world = @import("world.zig");
 const audio = @import("audio.zig");
 const Anim = @import("Anim.zig");
+const main = @import("main.zig");
 
 var music_data = @embedFile(@import("world_data").music);
 const Database = @import("database.zig");
@@ -630,6 +631,14 @@ pub fn update(time: usize) !void {
         // Remove destroyed items
         if (debug and verbosity > 1) w4.tracef("[remove] %d of %d", remove, actors.items.len);
         const actor = actors.swapRemove(remove);
+        if (actor.template.kind == .Player) {
+            main.next = .Menu;
+            long_fba.reset();
+            level_fba.reset();
+            frame_fba[0].reset();
+            frame_fba[1].reset();
+            return;
+        }
         health = Assoc(Health).swapRemove(health, remove, actors.items.len);
         intelligences = Assoc(Intelligence).swapRemove(intelligences, remove, actors.items.len);
 
