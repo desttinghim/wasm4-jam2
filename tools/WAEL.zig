@@ -485,7 +485,7 @@ pub fn parse(alloc: std.mem.Allocator, buf: []const u8) !WriteContext {
                             var tick = time.tick(currentDuration);
                             if (currentRows != tick) {
                                 if (currentInstrument) |instr| {
-                                    const remainder = tick - (instr.a + instr.d + instr.r);
+                                    const remainder = tick -| (@intCast(u32, instr.a) + @intCast(u32, instr.d) + @intCast(u32, instr.r));
                                     try eventlist.append(Event.init_adsr(instr.a, instr.d, remainder, instr.r));
                                 } else if (currentSfx) |sound| {
                                     try eventlist.append(Event.init_adsr(sound.a, sound.d, sound.s, sound.r));

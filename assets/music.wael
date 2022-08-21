@@ -12,20 +12,21 @@
 # a, d, s, r, use hexadecimal
 # freq, glide
 
-: Instrument arps   !mode 2 ;
 : Instrument kick   !mode 3 !r 2 ;
-: Instrument lead   !mode 1 !d 1 !r FF ;
+: Instrument arps   !mode 2 ;
+: Instrument lead   !mode 1 !d 4 !r FF ;
+: Instrument harmony !a 1 !d 3 !r 3 ;
 : Instrument offlead !mode 2 !d 60 !r FF ;
 : Instrument silly  !mode 1 ;
+: Instrument bass   !mode 3 !r 10 ;
 
 # : Instrument lead2  !mode 1 !d 1 !r 180 ;
-# : Instrument bass   ;
 # : Instrument noise  ;
 
 # Sfx
 
 : Sfx kick      !d 1 !r 10 !freq 30 !glide 0 ;
-: Sfx snare     !r 15 !freq 20 !glide 6 ;
+: Sfx snare     !r 10 !freq 30 !glide 6 ;
 : Sfx cymbal    !s 2 !freq 4E ;
 
 ##########
@@ -35,36 +36,35 @@
 !tempo 112
 !time 4/4
 
-# melody A, on channel pulse 1
-# : Part melodyA @pulse1
-# [ %lead
-#   (mf) o4  c8 d g  c d g  c d  | > a b < d  > a b < d  > a b |
-# ] ;
+: Part melody @pulse1
+[ %lead
+  (p) o5 r4 r r r | e-8 e- e- d- d- d- d- d- | c c c d- d- d- f4 |
+] ;
 
-# : Part bassA @triangle
+# : Part bass @pulse2
 # [ %bass
-#     (mf) o3  c2 g | > a < d |
-#              c2 g | > a < d |
+#   (p) o3 r4 r r r8 r r a16 < c | d8 r r d r d > a4 | < d8 r r d r d < f4 |
 # ] ;
 
-# : Part melodyB @pulse1
-# [ %med
-#     (mf) o4  c8 d g  c d g  c d  | > a b < d  > a b < d  > a b |
-# ] ;
+: Part harmony @triangle
+[ %harmony
+  (f) o4 r4 r r r | f16 r f r f r f r f r f r f r f r | f r f r f r f r f r f r f r f r |
+] ;
 
-: Part drumloop @noise
-[[ (f) o4 %kick a16  %cymbal a %snare a %cymbal a %kick a %cymbal a %snare a %cymbal a %kick a %cymbal a %snare a %cymbal a %kick a %cymbal a %snare a %cymbal a |
+
+: Part drumloop @pulse2
+[[ (f) o4 %kick a8 %cymbal a %snare a r %kick a %cymbal r %snare a r |
 ]]
 ;
 
 : Song gameOver
-  # play @p1 melodyA
-  # play @tri bassA
-  play @noise drumloop
+  play @pulse1 melody
+  play @triangle harmony
+  # play @pulse2 bass
 
   # at 4
   # play @p1 melodyB
 
-  at 6
-  dalSegno
+  at 3
+  # dalSegno
 ;
