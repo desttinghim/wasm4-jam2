@@ -1,0 +1,20 @@
+[package]
+name = "desttinghim/punch-em-up"
+version = "0.3.0"
+description = "A tiny beat'em up"
+license = "ISC"
+repository = "https://github.com/desttinghim/gamejam2"
+readme = "README.md"
+
+[[module]]
+name = "punch-em-up"
+source = "bundle/cart/punch-em-up.wasm"
+abi = "wasm4"
+
+[module.interfaces]
+wasm4 = "0.0.1"
+
+[[command]]
+name = "play"
+module = "punch-em-up"
+runner = "wasm4@0.0.1"
