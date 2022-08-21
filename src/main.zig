@@ -95,7 +95,7 @@ fn start_safe() !void {
     db = try Database.init(long_alloc);
     const music = try audio.music.Context.init(music_data);
     wae = audio.music.WAE.init(music);
-    wae.playSong(4);
+    wae.playSong(2);
 
     var spawn: world.Entity = db.getSpawn() orelse return error.PlayerNotFound;
     room = db.getRoomContaining(spawn.toVec()) orelse return error.RoomNotFound;
@@ -266,8 +266,7 @@ fn update_safe() !void {
             if (player.motive and player_combat.is_attacking) player_combat.endAttack();
             if (input.btnp(.one, .z)) {
                 player_combat.startAttack(time);
-                // TODO: manage sound effects in one place
-                w4.tone(120 | 0 << 16, 0 | 16 << 8 | 0 << 16 | 2 << 24, 38, 0x03);
+                audio.punch.play();
             }
         } else if (!player_combat.animator.interruptable) {
             player.move(player.facing.getVec2f());
@@ -278,8 +277,9 @@ fn update_safe() !void {
             const delta = time - player_combat.last_attacking;
             if (delta > 25 and input.btnp(.one, .z)) {
                 player_combat.startAttack(time);
-                // TODO: manage sound effects in one place
-                w4.tone(120 + player_combat.chain | 0 << 16, 0 | 16 << 8 | 0 << 16 | 2 << 24, 38, 0x03);
+                var punch = audio.punch;
+                punch.fstart += player_combat.chain;
+                punch.play();
             }
             if (delta > 40) player_combat.endAttack();
         }
@@ -479,8 +479,7 @@ fn update_safe() !void {
             actor.z = 0;
             if (@fabs(actor.last_z) > 0.7) {
                 actor.bounced = true;
-                // TODO: manage sound effects in one place
-                w4.tone(60 | 90 << 16, 4 | 8 << 8 | 8 << 16, 10, 0x03);
+                audio.bounced.play();
             }
         }
     }
@@ -546,8 +545,7 @@ fn update_safe() !void {
                     taker.pos += vel;
                     taker.z += 2;
                     taker.stun(time);
-                    // TODO: manage sound effects in one place
-                    w4.tone(150 | 50 << 16, 8 << 16, 30, 0x03);
+                    audio.hit.play();
                     if (debug and verbosity > 1) w4.tracef("[hit] taker (%d, %d)", @floatToInt(i32, taker.pos[0]), @floatToInt(i32, taker.pos[1]));
                     if (debug and verbosity > 1) w4.tracef("[hit] hitter (%d, %d)", @floatToInt(i32, hitter.pos[0]), @floatToInt(i32, hitter.pos[1]));
                     if (debug and verbosity > 1) w4.tracef("[hit] velocity (%d, %d)", @floatToInt(i32, vel[0]), @floatToInt(i32, vel[1]));
@@ -576,8 +574,6 @@ fn update_safe() !void {
         const actor = actors.swapRemove(remove);
         health = Assoc(Health).swapRemove(health, remove, actors.items.len);
         intelligences = Assoc(Intelligence).swapRemove(intelligences, remove, actors.items.len);
-        // TODO: manage sound effects in one place
-        // w4.tone(180 | 150 << 16, 0 | 6 << 8 | 0 << 16 | 2 << 24, 38, 0x01);
 
         // Add their position to collectables
         new_collectables[collectCount] = .{ actor.pos, actor.last_pos };

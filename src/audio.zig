@@ -3,6 +3,56 @@ const std = @import("std");
 const debug = false;
 const verbosity = 0;
 
+// const start_attack = w4.tone(120 + player_combat.chain | 0 << 16, 0 | 16 << 8 | 0 << 16 | 2 << 24, 38, 0x03);
+pub const punch = Sfx{
+    .channel = w4.TONE_NOISE,
+    .volume = 38,
+    .attack = 2,
+    .release = 16,
+    .fstart = 120,
+};
+// const bounced = w4.tone(60 | 90 << 16, 4 | 8 << 8 | 8 << 16, 10, 0x03);
+pub const bounced = Sfx{
+    .channel = w4.TONE_NOISE,
+    .volume = 10,
+    .decay = 8,
+    .release = 8,
+    .sustain = 4,
+    .fstart = 60,
+    .fend = 90,
+};
+// const hit = w4.tone(150 | 50 << 16, 8 << 16, 30, 0x03);
+pub const hit = Sfx{
+    .channel = w4.TONE_NOISE,
+    .volume = 30,
+    .decay = 16,
+    .fstart = 150,
+    .fend = 50,
+};
+// const death = w4.tone(180 | 150 << 16, 0 | 6 << 8 | 0 << 16 | 2 << 24, 38, 0x01);
+
+pub const Sfx = struct {
+    channel: u32 = 0,
+    mode: u32 = 0,
+    fstart: u32 = 0,
+    fend: u32 = 0,
+    sustain: u32 = 0,
+    release: u32 = 0,
+    decay: u32 = 0,
+    attack: u32 = 0,
+    volume: u16 = 0,
+    peak: u16 = 0,
+
+    pub fn play(sfx: Sfx) void {
+        w4.tone(
+            sfx.fstart | sfx.fend << 16,
+            sfx.sustain | sfx.release << 8 | sfx.decay << 16 | sfx.attack << 24,
+            sfx.volume | sfx.peak << 8,
+            sfx.channel | sfx.mode << 2,
+        );
+    }
+};
+
 pub const music = struct {
     pub const Flag = struct {
         pub const Pulse1: u8 = w4.TONE_PULSE1;
