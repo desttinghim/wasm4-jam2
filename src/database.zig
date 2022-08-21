@@ -4,8 +4,8 @@ const world = @import("world.zig");
 const w4 = @import("wasm4.zig");
 var world_data = @embedFile(@import("world_data").path);
 const builtin = @import("builtin");
-const debug = builtin.mode == .Debug;
-// const debug = false;
+// const debug = builtin.mode == .Debug;
+const debug = false;
 
 const Cursor = std.io.FixedBufferStream([]const u8);
 

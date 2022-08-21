@@ -557,17 +557,17 @@ pub fn parse(alloc: std.mem.Allocator, buf: []const u8) !WriteContext {
     }
 
     // Calculate byte offset
-    var patterns_bytes = std.ArrayList(u16).init(alloc);
-    var event_sum: u16 = 0;
-    for (eventlist.items) |event, i| {
-        for (patterns_index.items) |pattern_index| {
-            if (pattern_index == i) {
-                try patterns_bytes.append(@intCast(u16, event_sum));
-            }
-        }
-        event_sum += event.toByteSize();
-    }
-    std.debug.assert(patterns_bytes.items.len == patterns_index.items.len);
+    // var patterns_bytes = std.ArrayList(u16).init(alloc);
+    // var event_sum: u16 = 0;
+    // for (eventlist.items) |event, i| {
+    //     for (patterns_index.items) |pattern_index| {
+    //         if (pattern_index == i) {
+    //             try patterns_bytes.append(@intCast(u16, event_sum));
+    //         }
+    //     }
+    //     event_sum += event.toByteSize();
+    // }
+    // std.debug.assert(patterns_bytes.items.len == patterns_index.items.len);
 
     // Calculate byte size
     var songlist_offsets = try alloc.alloc(u16, songlist.items.len);
@@ -587,7 +587,7 @@ pub fn parse(alloc: std.mem.Allocator, buf: []const u8) !WriteContext {
     var index: usize = 0;
     for (songlist.items) |song| {
         for (song.items) |control_event| {
-            std.log.warn("[wael] [{}] {}", .{index, control_event});
+            // std.log.warn("[wael] [{}] {}", .{index, control_event});
             songlist_events[index] = control_event;
             index += 1;
         }
@@ -600,7 +600,7 @@ pub fn parse(alloc: std.mem.Allocator, buf: []const u8) !WriteContext {
         .songs = songlist_offsets,
         .song_events = songlist_events,
         .events = eventlist.toOwnedSlice(),
-        .patterns = patterns_bytes.toOwnedSlice(),
+        // .patterns = patterns_bytes.toOwnedSlice(),
     };
 }
 
