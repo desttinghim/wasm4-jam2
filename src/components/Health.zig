@@ -1,4 +1,4 @@
-const geom = @import("geom.zig");
+const geom = @import("../geom.zig");
 
 max: u8,
 current: u8,

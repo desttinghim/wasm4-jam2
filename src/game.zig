@@ -5,7 +5,6 @@ const geom = @import("geom.zig");
 const input = @import("input.zig");
 const world = @import("world.zig");
 const audio = @import("audio.zig");
-const Anim = @import("Anim.zig");
 const main = @import("main.zig");
 
 var music_data = @embedFile(@import("world_data").music);
@@ -39,11 +38,12 @@ const frame_alloc: [2]std.mem.Allocator = .{
 const Assoc = @import("assoc.zig").Assoc;
 
 // Components
-const Actor = @import("Actor.zig");
-const Combat = @import("Combat.zig");
-const Health = @import("Health.zig");
-const Renderable = @import("Renderable.zig");
-const Intelligence = @import("Intelligence.zig");
+const Anim = @import("components/Anim.zig");
+const Actor = @import("components/Actor.zig");
+const Combat = @import("components/Combat.zig");
+const Health = @import("components/Health.zig");
+const Renderable = @import("components/Renderable.zig");
+const Intelligence = @import("components/Intelligence.zig");
 
 var actors: std.ArrayList(Actor) = undefined;
 // var collectable_list: std.ArrayList([2]geom.Vec2f) = undefined;

@@ -1,4 +1,4 @@
-const BlitFlags = @import("draw.zig").BlitFlags;
+const BlitFlags = @import("../draw.zig").BlitFlags;
 const Actor = @import("Actor.zig");
 
 pub const CombatTemplate = struct {

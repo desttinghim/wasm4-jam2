@@ -471,7 +471,7 @@ pub fn parse(alloc: std.mem.Allocator, buf: []const u8) !WriteContext {
                             currentOctave = (tok[1] - '0');
                         } else return error.MissingOctaveNumber,
                         else => {
-                            std.log.warn("{s}", .{tok});
+                            // std.log.warn("{s}", .{tok});
                             var note_res = try parseNote(tok);
                             if (tok.len > 1 and note_res.end != tok.len) {
                                 var duration_res = try parseDuration(tok[note_res.end + 1 .. tok.len]);

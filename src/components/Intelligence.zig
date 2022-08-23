@@ -1,4 +1,4 @@
-const geom = @import("geom.zig");
+const geom = @import("../geom.zig");
 
 player_dir: ?geom.Direction = null,
 

@@ -1,6 +1,6 @@
-const draw = @import("draw.zig");
-const geom = @import("geom.zig");
-const world = @import("world.zig");
+const draw = @import("../draw.zig");
+const geom = @import("../geom.zig");
+const world = @import("../world.zig");
 const Anim = @import("Anim.zig");
 
 const Actor = @This();

@@ -1,7 +1,7 @@
 const std = @import("std");
 const draw = @import("draw.zig");
 const geom = @import("geom.zig");
-const Anim = @import("Anim.zig");
+const Anim = @import("components/Anim.zig");
 
 pub const assets = @import("assets");
 pub const bitmap = draw.Bitmap{
