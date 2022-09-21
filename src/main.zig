@@ -180,28 +180,28 @@ fn update_safe() !void {
 fn render(world_to_view: zm.Mat, area: geom.AABB) void {
     // const res_half = @divTrunc(area[2], 2);
     // const res_halfu = @intCast(u32, res_half);
-    const res_half = 1;
-    // const res_halfu = @intCast(u32, res_half);
+    const res_half = 2;
+    const res_halfu = @intCast(u32, res_half);
     var y: i32 = area[0];
     while (y < area[2]) : (y += res_half) {
         var x: i32 = area[1];
         while (x < area[3]) : (x += res_half) {
-            // const ro = @as(Vec3f, camera.position);
-            // const vd = rayDirection(std.math.pi / 6.0, @intToFloat(f32, x), @intToFloat(f32, y));
-            // const rdz = zm.mul(world_to_view, vd);
-            // const rd = geom.vec3.normalizef(Vec3f{ rdz[0], rdz[1], rdz[2] });
+            const ro = @as(Vec3f, camera.position);
+            const vd = rayDirection(std.math.pi / 6.0, @intToFloat(f32, x), @intToFloat(f32, y));
+            const rdz = zm.mul(world_to_view, vd);
+            const rd = geom.vec3.normalizef(Vec3f{ rdz[0], rdz[1], rdz[2] });
 
-            const sph = sdf.sphereProjection(.{0,0,0,5}, world_to_view, std.math.pi / 6.0);
-            if (sph > 0) {
-                w4.DRAW_COLORS.* = 4;
-                draw.pixel(x,y);
-            }
-
-            // const info = sdf.coverageSearch(scene, ro, rd, 1.0, 100.0, .{.maxSteps = 12, .epsilon = 1});
-            // if (info.hit) {
-            //     shade(info.point, y);
-            //     w4.rect(x,y,res_halfu, res_halfu);
+            // const sph = sdf.sphereProjection(.{ 0, 0, 0, 5 }, world_to_view, std.math.pi / 6.0);
+            // if (sph > 0) {
+            //     w4.DRAW_COLORS.* = 4;
+            //     draw.pixel(x, y);
             // }
+
+            const info = sdf.coverageSearch(scene, ro, rd, 1.0, 100.0, .{ .maxSteps = 12, .epsilon = 1 });
+            if (info.hit) {
+                shade(info.point, y);
+                w4.rect(x, y, res_halfu, res_halfu);
+            }
         }
     }
 }

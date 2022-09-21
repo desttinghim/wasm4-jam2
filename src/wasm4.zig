@@ -37,7 +37,7 @@ pub const BLIT_FLIP_X: u32 = 2;
 pub const BLIT_FLIP_Y: u32 = 4;
 pub const BLIT_ROTATE: u32 = 8;
 
-usingnamespace if (@import("builtin").is_test) stubWasm4 else externWasm4;
+pub usingnamespace if (@import("builtin").is_test) stubWasm4 else externWasm4;
 
 const externWasm4 = struct {
     // ┌───────────────────────────────────────────────────────────────────────────┐
